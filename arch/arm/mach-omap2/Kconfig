@@ -462,6 +462,11 @@ config OMAP_OVERRIDE_MPUTRIM
 	  Override factory-set trim value for MPU DPLL to allow locking at 
 	  rates >2.4GHz (required for MPU frequencies >1.2GHz).
 
+config OMAP_REBOOT_REASON
+	depends on ARCH_OMAP4
+	bool
+
+
 config OMAP4_ARM_ERRATA_742230
 	bool "Enables the workaround for ARM errata 742230 on GP devices"
 	help
