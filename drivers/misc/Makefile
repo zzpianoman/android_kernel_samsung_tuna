@@ -61,4 +61,5 @@ obj-$(CONFIG_COLOR_CONTROL)  	+= color_control.o
 obj-$(CONFIG_CUSTOM_VOLTAGE) 	+= custom_voltage.o
 obj-$(CONFIG_OMAP_TEMP_CONTROL)	+= temp_control.o
 obj-y				+= sound_control.o
+obj-$(CONFIG_OMAP4_DUTY_CYCLE)  += omap4_duty_cycle.o
 
