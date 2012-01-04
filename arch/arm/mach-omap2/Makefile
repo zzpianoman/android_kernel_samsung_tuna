@@ -321,3 +321,4 @@ endif
 
 
 obj-$(CONFIG_ION_OMAP)			+= omap4_ion.o
+obj-$(CONFIG_OMAP_RAM_CONSOLE)		+= omap_ram_console.o
