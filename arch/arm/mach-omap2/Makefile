@@ -316,4 +316,5 @@ obj-$(CONFIG_ARCH_OMAP4)		+= omap_dmm.o
 obj-$(CONFIG_OMAP_FIQ_DEBUGGER)		+= omap_fiq_debugger.o
 
 obj-$(CONFIG_ION_OMAP)			+= omap4_ion.o
+obj-$(CONFIG_OMAP_RAM_CONSOLE)		+= omap_ram_console.o
 
