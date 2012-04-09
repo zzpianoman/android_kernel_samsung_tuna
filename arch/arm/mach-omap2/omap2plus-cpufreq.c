@@ -473,8 +473,8 @@ static void __exit omap_duty_cooling_exit(void)
 
 #else
 
-static int __init omap_duty_cooling_init(void) { return 0; };
-static void __exit omap_duty_cooling_exit(void);
+static int __init omap_duty_cooling_init(void) { return 0; }
+static void __exit omap_duty_cooling_exit(void) { }
 
 #endif
 
