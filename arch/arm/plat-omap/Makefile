@@ -34,3 +34,6 @@ obj-$(CONFIG_OMAP_MBOX_FWK) += mailbox.o
 
 obj-$(CONFIG_OMAP_PM_NOOP) += omap-pm-interface.o
 obj-$(CONFIG_OMAP_PM) += omap-pm-interface.o omap-pm-helper.o
+
+obj-$(CONFIG_ION_OMAP) += android-display.o
+
