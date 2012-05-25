@@ -92,6 +92,9 @@ static unsigned long min_sample_time = DEFAULT_MIN_SAMPLE_TIME;
  */
 #define DEFAULT_TIMER_RATE (15 * USEC_PER_MSEC)
 static unsigned long timer_rate = DEFAULT_TIMER_RATE;
+#ifdef CONFIG_OMAP4_DPLL_CASCADING
+static unsigned long default_timer_rate;
+#endif
 
 /*
  * Wait this long before raising speed above hispeed, by default a single
@@ -1214,6 +1217,10 @@ static int __init cpufreq_interactive_init(void)
 	unsigned int i;
 	struct cpufreq_interactive_cpuinfo *pcpu;
 	struct sched_param param = { .sched_priority = MAX_RT_PRIO-1 };
+	
+#ifdef CONFIG_OMAP4_DPLL_CASCADING
+	default_timer_rate = DEFAULT_TIMER_RATE;
+#endif
 
 	/* Initalize per-cpu timers */
 	for_each_possible_cpu(i) {
