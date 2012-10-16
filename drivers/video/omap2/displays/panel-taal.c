@@ -1346,8 +1346,11 @@ static int taal_suspend(struct omap_dss_device *dssdev)
 
 	mutex_lock(&td->lock);
 
-	if (dssdev->state != OMAP_DSS_DISPLAY_ACTIVE) {
+	if (dssdev->state == OMAP_DSS_DISPLAY_DISABLED) {
 		r = -EINVAL;
+		goto err;
+	} else if (dssdev->state == OMAP_DSS_DISPLAY_SUSPENDED) {
+		r = 0;
 		goto err;
 	}
 
