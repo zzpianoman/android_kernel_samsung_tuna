@@ -518,15 +518,11 @@ static int fsa9480_detect_callback(struct otg_id_notifier_block *nb)
 		/* usb peripheral mode */
 		if (!(nb_info->detect_set->mask & FSA9480_DETECT_USB))
 			goto unhandled;
-#ifdef CONFIG_FORCE_FAST_CHARGE
-		if (force_fast_charge != 0) {
-		_detected(usbsw, FSA9480_DETECT_CHARGER);
-	} else {
-		_detected(usbsw, FSA9480_DETECT_USB);
-	}
-#else
-		_detected(usbsw, FSA9480_DETECT_USB);
-#endif
+
+		if (force_fast_charge == 2)
+			_detected(usbsw, FSA9480_DETECT_CHARGER);
+		else
+			_detected(usbsw, FSA9480_DETECT_USB);
 		goto handled;
 	} else if (dev_type & DEV_UART_MASK) {
 		if (!(nb_info->detect_set->mask & FSA9480_DETECT_UART))
@@ -549,6 +545,7 @@ static int fsa9480_detect_callback(struct otg_id_notifier_block *nb)
 		_detected(usbsw, FSA9480_DETECT_USB_HOST);
 
 		mutex_unlock(&usbsw->lock);
+
 
 		/* Enable the external ID interrupt to detect the detach of the
 		 * USB host cable since the FSA9480 is unable to detect it.
