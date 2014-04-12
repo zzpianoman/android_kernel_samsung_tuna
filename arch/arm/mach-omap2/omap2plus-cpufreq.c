@@ -556,7 +556,29 @@ static struct freq_attr omap_cpufreq_attr_iva_freq_oc = {
 
 #endif
 
+static ssize_t show_gpu_clock(struct cpufreq_policy *policy, char *buf) {
+	struct clk *clk = clk_get(NULL, "dpll_per_m7x2_ck");	
+	return sprintf(buf, "%lu\n", clk->rate/1000);
+}
 
+static struct freq_attr gpu_clock = {
+    .attr = {.name = "gpu_cur_freq",
+	     .mode=0644,
+    },
+    .show = show_gpu_clock,
+};
+
+static ssize_t show_iva_clock(struct cpufreq_policy *policy, char *buf) {
+        struct clk *clk = clk_get(NULL, "dpll_iva_m5x2_ck");
+        return sprintf(buf, "%lu\n", clk->rate/1000);
+}
+
+static struct freq_attr iva_clock = {
+    .attr = {.name = "iva_cur_freq",
+             .mode=0644,
+    },
+    .show = show_iva_clock,
+};
 
 static ssize_t show_screen_on_freq(struct cpufreq_policy *policy, char *buf)
 {
@@ -634,6 +656,9 @@ static struct freq_attr *omap_cpufreq_attr[] = {
 #ifdef CONFIG_IVA_OVERCLOCK
 	&omap_cpufreq_attr_iva_freq_oc,
 #endif
+	&gpu_clock,
+	&iva_clock,
+	&omap_cpufreq_attr_screen_on_freq,
 	NULL,
 };
 
