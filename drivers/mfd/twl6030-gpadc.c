@@ -517,6 +517,27 @@ out:
 }
 EXPORT_SYMBOL(twl6030_gpadc_conversion);
 
+#ifdef CONFIG_MACH_TUNA
+int twl6030_get_gpadc_conversion(int channel_no)
+{
+	struct twl6030_gpadc_request req;
+	int temp = 0;
+	int ret;
+
+	req.channels = (1 << channel_no);
+	req.method = TWL6030_GPADC_SW2;
+	req.active = 0;
+	req.func_cb = NULL;
+	ret = twl6030_gpadc_conversion(&req);
+	if (ret < 0)
+		return ret;
+	if (req.rbuf[channel_no] > 0)
+		temp = req.rbuf[channel_no];
+
+	return temp;
+}
+#endif
+
 #define in_gain(index) \
 static SENSOR_DEVICE_ATTR(in##index##_gain, S_IRUGO|S_IWUSR, show_gain, \
 	set_gain, index); \
