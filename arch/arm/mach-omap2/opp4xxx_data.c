@@ -758,23 +758,11 @@ int __init omap4_opp_init(void)
 					ARRAY_SIZE(omap447x_opp_low_def_list));
 	}
 
-    if (!r) {
-    if (omap4_has_mpu_1_2ghz())
-    omap4_mpu_opp_enable(1200000000);
-#ifdef CONFIG_OMAP_OCFREQS
-	omap4_mpu_opp_enable(1350000000);
-    omap4_mpu_opp_enable(1400000000);
-    omap4_mpu_opp_enable(1500000000);
-    //omap4_mpu_opp_enable(1600000000);
-    //omap4_mpu_opp_enable(1650000000);
-    //omap4_mpu_opp_enable(1720000000);
-    //omap4_mpu_opp_enable(1760000000);
-    //omap4_mpu_opp_enable(1800000000);
-#endif
-		/* The tuna PCB doesn't support 1.5GHz, so disable it for now */
-		/*if (omap4_has_mpu_1_5ghz())
-			omap4_mpu_opp_enable(1500000000);*/
-	
+	if (!r) {
+		if (omap4_has_mpu_1_2ghz())
+			omap4_mpu_opp_enable(1200000000);
+		if (omap4_has_mpu_1_5ghz())
+			omap4_mpu_opp_enable(1500000000);
 	}
 
 	/* Update ABB settings */
