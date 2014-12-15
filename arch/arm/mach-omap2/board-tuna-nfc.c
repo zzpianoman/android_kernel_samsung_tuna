@@ -99,7 +99,7 @@ static irqreturn_t nfc_irq_isr(int irq, void *dev)
 	 * take a 500ms wakelock, to give time for higher layers
 	 * to either take their own wakelock or finish processing
 	 */
-	wake_lock_timeout(&nfc_wake_lock, msecs_to_jiffies(500));
+	//wake_lock_timeout(&nfc_wake_lock, msecs_to_jiffies(500));
 
 	return IRQ_HANDLED;
 }
@@ -122,7 +122,7 @@ void __init omap4_tuna_nfc_init(void)
 	omap_mux_init_gpio(GPIO_NFC_IRQ, OMAP_PIN_INPUT_PULLUP |
 			OMAP_PIN_OFF_WAKEUPENABLE);
 
-	wake_lock_init(&nfc_wake_lock, WAKE_LOCK_SUSPEND, "nfc");
+	//wake_lock_init(&nfc_wake_lock, WAKE_LOCK_SUSPEND, "nfc");
 
 	irq = gpio_to_irq(GPIO_NFC_IRQ);
 	if (request_irq(irq, nfc_irq_isr, IRQF_TRIGGER_RISING, "nfc_irq",
