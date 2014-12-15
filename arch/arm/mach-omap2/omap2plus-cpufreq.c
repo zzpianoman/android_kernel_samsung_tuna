@@ -42,6 +42,11 @@
 
 #include "dvfs.h"
 
+#ifdef CONFIG_CUSTOM_VOLTAGE
+#include <linux/custom_voltage.h>
+#endif
+
+
 #ifdef CONFIG_SMP
 struct lpj_info {
 	unsigned long	ref;
@@ -61,11 +66,20 @@ static DEFINE_MUTEX(omap_cpufreq_lock);
 
 static unsigned int max_thermal;
 static unsigned int max_capped;
+static unsigned int min_capped;
 static unsigned int max_freq;
 static unsigned int current_target_freq;
-static unsigned int screen_off_max_freq;
+static unsigned int screen_off_max_freq=537600;
+static unsigned int screen_on_min_freq=384000;
 static bool omap_cpufreq_ready;
 static bool omap_cpufreq_suspended;
+
+#ifdef CONFIG_IVA_OVERCLOCK
+#define IVA_OC_FREQUENCY 430000000 // must match value in opp4xxx_data.c
+static int iva_freq_oc = 0; // boolean flag
+#endif
+
+
 
 static unsigned int omap_getspeed(unsigned int cpu)
 {
@@ -96,6 +110,9 @@ static int omap_cpufreq_scale(unsigned int target_freq, unsigned int cur_freq)
 
 	if (max_capped && freqs.new > max_capped)
 		freqs.new = max_capped;
+
+	if (min_capped && freqs.new < min_capped)
+		freqs.new = min_capped;	
 
 	if ((freqs.old == freqs.new) && (cur_freq = freqs.new))
 		return 0;
@@ -268,12 +285,39 @@ static void omap_cpu_early_suspend(struct early_suspend *h)
 
 	mutex_lock(&omap_cpufreq_lock);
 
-	if (screen_off_max_freq) {
+	if (screen_off_max_freq && min_capped) {
 		max_capped = screen_off_max_freq;
 
 		cur = omap_getspeed(0);
-		if (cur > max_capped)
+
+		if (cur > max_capped) {
 			omap_cpufreq_scale(max_capped, cur);
+		}
+
+		else if (current_target_freq < min_capped) {
+			omap_cpufreq_scale(current_target_freq, cur);
+		}
+
+		min_capped = 0;
+	}
+
+	else if (screen_off_max_freq) {
+		max_capped = screen_off_max_freq;
+
+		cur = omap_getspeed(0);
+
+		if (cur > max_capped) {
+			omap_cpufreq_scale(max_capped, cur);
+		}
+	}
+
+	else if (min_capped) {
+		cur = omap_getspeed(0);
+
+		if (current_target_freq < min_capped) {
+			omap_cpufreq_scale(current_target_freq, cur);
+		}
+		min_capped = 0;
 	}
 
 	mutex_unlock(&omap_cpufreq_lock);
@@ -284,15 +328,42 @@ static void omap_cpu_late_resume(struct early_suspend *h)
 	unsigned int cur;
 
 	mutex_lock(&omap_cpufreq_lock);
+		
+	if (max_capped && screen_on_min_freq) {
+		max_capped = 0;
+		min_capped = screen_on_min_freq;
 
-	if (max_capped) {
+		cur = omap_getspeed(0);
+
+		if (cur < min_capped) {
+			omap_cpufreq_scale(min_capped, cur);
+		}
+
+		else if (cur != current_target_freq) {
+			omap_cpufreq_scale(current_target_freq, cur);
+		}
+	}
+
+	else if (max_capped) {
 		max_capped = 0;
 
 		cur = omap_getspeed(0);
-		if (cur != current_target_freq)
-			omap_cpufreq_scale(current_target_freq, cur);
-	}
 
+		if (cur != current_target_freq) {
+			omap_cpufreq_scale(current_target_freq, cur);
+		}
+	}
+		
+	else if (screen_on_min_freq) {
+		min_capped = screen_on_min_freq;
+
+		cur = omap_getspeed(0);
+
+		if (cur < min_capped) {
+			omap_cpufreq_scale(min_capped, cur);
+		}
+	}		
+				
 	mutex_unlock(&omap_cpufreq_lock);
 }
 
@@ -339,8 +410,8 @@ static int __cpuinit omap_cpu_init(struct cpufreq_policy *policy)
 
 	cpufreq_frequency_table_get_attr(freq_table, policy->cpu);
 
-	policy->min = policy->cpuinfo.min_freq;
-	policy->max = policy->cpuinfo.max_freq;
+	policy->min = 224000;
+	policy->max = 1228800;
 	policy->cur = omap_getspeed(policy->cpu);
 
 	for (i = 0; freq_table[i].frequency != CPUFREQ_TABLE_END; i++)
@@ -361,6 +432,11 @@ static int __cpuinit omap_cpu_init(struct cpufreq_policy *policy)
 
 	/* FIXME: what's the actual transition time? */
 	policy->cpuinfo.transition_latency = 300 * 1000;
+
+#ifdef CONFIG_CUSTOM_VOLTAGE
+ 	customvoltage_register_freqmutex(&omap_cpufreq_lock);
+#endif
+
 
 	return 0;
 
@@ -421,9 +497,143 @@ struct freq_attr omap_cpufreq_attr_screen_off_freq = {
 	.store = store_screen_off_freq,
 };
 
+#ifdef CONFIG_IVA_OVERCLOCK
+static ssize_t show_iva_freq_oc(struct cpufreq_policy *policy, char *buf)
+{
+ 	return sprintf(buf, "%d\n", iva_freq_oc );
+}
+
+static ssize_t store_iva_freq_oc(struct cpufreq_policy *policy, const char *buf, size_t size)
+{
+ 	int prev_oc, ret;
+ 	struct device *dev;
+ 	struct voltagedomain *mpu_voltdm;
+
+ 	if (iva_freq_oc < 0 || iva_freq_oc > 1 ) {
+ 		pr_info("iva_oc value error, bailing\n");
+ 		return size;
+ 	}
+
+ 	mpu_voltdm = voltdm_lookup("iva");
+ 	if ( mpu_voltdm == NULL ) {
+ 		pr_info("iva_oc voltdomain error, bailing\n");
+ 		return size;
+ 	}
+
+ 	prev_oc = iva_freq_oc;
+
+ 	sscanf(buf, "%d\n", &iva_freq_oc);
+
+ 	if (prev_oc == iva_freq_oc) return size;
+
+ 	mutex_lock(&omap_cpufreq_lock);
+
+ 	dev = omap_hwmod_name_get_dev("iva");
+ 	if (IS_ERR(dev)) {
+ 		pr_err("iva_oc: no iva device, bailing\n" );
+ 		goto Exit;
+ 	}
+
+ 	if ( iva_freq_oc )
+ 		ret = opp_enable(dev, IVA_OC_FREQUENCY);
+ 	else
+ 		ret = opp_disable(dev, IVA_OC_FREQUENCY);
+
+ 	pr_info("iva speed %s: %d, ret: %d\n", iva_freq_oc ? "enabled" : "disabled", IVA_OC_FREQUENCY, ret);
+
+Exit:
+
+ 	mutex_unlock(&omap_cpufreq_lock);
+
+ 	return size;
+}
+
+static struct freq_attr omap_cpufreq_attr_iva_freq_oc = {
+ 	.attr = { .name = "iva_freq_oc", .mode = 0644,},
+ 	.show = show_iva_freq_oc,
+ 	.store = store_iva_freq_oc,
+};
+
+#endif
+
+
+
+static ssize_t show_screen_on_freq(struct cpufreq_policy *policy, char *buf)
+{
+	return sprintf(buf, "%u\n", screen_on_min_freq);
+}
+
+static ssize_t store_screen_on_freq(struct cpufreq_policy *policy,
+	const char *buf, size_t count)
+{
+	unsigned int freq = 0;
+	int ret;
+	int index;
+
+	if (!freq_table)
+		return -EINVAL;
+
+	ret = sscanf(buf, "%u", &freq);
+	if (ret != 1)
+		return -EINVAL;
+
+	mutex_lock(&omap_cpufreq_lock);	
+
+	ret = cpufreq_frequency_table_target(policy, freq_table, freq,
+		CPUFREQ_RELATION_H, &index);
+	if (ret)
+		goto out;
+
+	screen_on_min_freq = freq_table[index].frequency;
+
+	ret = count;
+
+	min_capped = screen_on_min_freq;
+
+out:
+	mutex_unlock(&omap_cpufreq_lock);
+	return ret;
+}
+
+struct freq_attr omap_cpufreq_attr_screen_on_freq = {
+	.attr = { .name = "screen_on_min_freq",
+		  .mode = 0644,
+		},
+	.show = show_screen_on_freq,
+	.store = store_screen_on_freq,
+};
+
+#ifdef CONFIG_CUSTOM_VOLTAGE
+static ssize_t show_UV_mV_table(struct cpufreq_policy * policy, char * buf)
+{
+ 	return customvoltage_mpuvolt_read(NULL, NULL, buf);
+}
+
+static ssize_t store_UV_mV_table(struct cpufreq_policy * policy, const char * buf, size_t count)
+{
+ 	return customvoltage_mpuvolt_write(NULL, NULL, buf, count);
+}
+
+static struct freq_attr omap_UV_mV_table = {
+ 	.attr = {.name = "UV_mV_table",
+ 		.mode=0644,
+ 	},
+ 	.show = show_UV_mV_table,
+ 	.store = store_UV_mV_table,
+};
+#endif
+
+
 static struct freq_attr *omap_cpufreq_attr[] = {
 	&cpufreq_freq_attr_scaling_available_freqs,
 	&omap_cpufreq_attr_screen_off_freq,
+	&omap_cpufreq_attr_screen_on_freq,
+#ifdef CONFIG_CUSTOM_VOLTAGE
+ 	&omap_UV_mV_table,
+#endif
+#ifdef CONFIG_IVA_OVERCLOCK
+	&omap_cpufreq_attr_iva_freq_oc,
+#endif
 	NULL,
 };
 
@@ -476,6 +686,11 @@ static struct platform_device omap_cpufreq_device = {
 static int __init omap_cpufreq_init(void)
 {
 	int ret;
+
+#ifdef CONFIG_IVA_OVERCLOCK
+	iva_freq_oc = 0;
+#endif
+
 
 	if (cpu_is_omap24xx())
 		mpu_clk_name = "virt_prcm_set";

@@ -60,8 +60,8 @@ static void throttle_delayed_work_fn(struct work_struct *work);
 
 #define TSHUT_THRESHOLD_TSHUT_HOT	110000	/* 110 deg C */
 #define TSHUT_THRESHOLD_TSHUT_COLD	100000	/* 100 deg C */
-#define BGAP_THRESHOLD_T_HOT		64000	/* 64 deg C */
-#define BGAP_THRESHOLD_T_COLD		61000	/* 61 deg C */
+#define BGAP_THRESHOLD_T_HOT		70000	/* 70 deg C */
+#define BGAP_THRESHOLD_T_COLD		67000	/* 67 deg C */
 #define OMAP_ADC_START_VALUE	530
 #define OMAP_ADC_END_VALUE	923
 
@@ -213,7 +213,6 @@ static void omap_configure_temp_sensor_thresholds(struct omap_temp_sensor
 						  *temp_sensor)
 {
 	u32 temp = 0, t_hot, t_cold, tshut_hot, tshut_cold;
-
 	t_hot = temp_to_adc_conversion(BGAP_THRESHOLD_T_HOT);
 	t_cold = temp_to_adc_conversion(BGAP_THRESHOLD_T_COLD);
 

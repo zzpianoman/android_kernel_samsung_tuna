@@ -392,4 +392,34 @@ config OMAP4_PPA_CPU1_ONLINE_BUG
 
 endmenu
 
+config IVA_OVERCLOCK
+ 	bool "IVA overlock on omap4460"
+ 	default y
+ 	help
+ 	  If enabled,creats a sysfs entry to allow overclocking the IVA on the omap4460.
+
+
+config TUNA_1_5_GHZ_MPU_OPP
+	bool "Enable Tuna 1.5 GHz MPU OPP"
+	depends on MACH_TUNA
+	default n
+	help
+	  If enabled, 1.5 GHz can be selected as CPU
+	  overclock frequency.
+
+config TUNA_ASRAM
+	bool "Additional Safe RAM of ~50 MB"
+	default n
+	help
+	  If enabled, reclaims 50 MB from the reserved RAM. Reclaming 
+	  max 50 MB is safe and makes 1080p camera
+	  functionality working.
+
+config FORCE_FAST_CHARGE
+	bool "Force AC charge mode at will"
+	default y
+	help
+	  A simple sysfs interface to force adapters that
+	  are detected as USB to charge as AC.
+
 endif
