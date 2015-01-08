@@ -68,7 +68,7 @@ unsigned int max_capped;
 static unsigned int min_capped;
 static unsigned int max_freq;
 static unsigned int current_target_freq;
-#define DEFAULT_SCREEN_OFF_MAX_FREQ 350000
+#define DEFAULT_SCREEN_OFF_MAX_FREQ 525000
 unsigned int screen_off_max_freq=DEFAULT_SCREEN_OFF_MAX_FREQ;
 #define DEFAULT_SCREEN_ON_MIN_FREQ 350000
 unsigned int screen_on_min_freq=DEFAULT_SCREEN_ON_MIN_FREQ;
