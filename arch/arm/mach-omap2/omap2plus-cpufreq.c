@@ -69,8 +69,8 @@ static unsigned int max_capped;
 static unsigned int min_capped;
 static unsigned int max_freq;
 static unsigned int current_target_freq;
-static unsigned int screen_off_max_freq=537600;
-static unsigned int screen_on_min_freq=384000;
+static unsigned int screen_off_max_freq=384000;
+static unsigned int screen_on_min_freq=224000;
 static bool omap_cpufreq_ready;
 static bool omap_cpufreq_suspended;
 
