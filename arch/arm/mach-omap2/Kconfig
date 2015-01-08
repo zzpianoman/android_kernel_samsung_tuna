@@ -390,8 +390,6 @@ config OMAP4_PPA_CPU1_ONLINE_BUG
 	  If, on the other hand, you do not understand the change, leave the
 	  default as enabled.
 
-endmenu
-
 config IVA_OVERCLOCK
  	bool "IVA overlock on omap4460"
  	default y
@@ -444,5 +442,5 @@ config OMAP_UCFREQS
       Enable the 230 MPU frequency slot.
 
 endmenu
-
 endif
+
