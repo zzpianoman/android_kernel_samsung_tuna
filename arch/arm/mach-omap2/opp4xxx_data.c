@@ -196,7 +196,6 @@ static struct omap_opp_def __initdata omap443x_opp_def_list[] = {
 };
 
 #ifdef CONFIG_OMAP_UCFREQS
-#define OMAP4460_VDD_MPU_OPP15_UV       	810000
 #define OMAP4460_VDD_MPU_OPP25_UV       	830000
 #endif
 
@@ -220,7 +219,6 @@ static struct omap_opp_def __initdata omap443x_opp_def_list[] = {
 #ifdef CONFIG_OMAP_SMARTREFLEX_CUSTOM_SENSOR
 struct omap_volt_data omap446x_vdd_mpu_volt_data[] = {
 #ifdef CONFIG_OMAP_UCFREQS
-	VOLT_DATA_DEFINE(OMAP4460_VDD_MPU_OPP15_UV, 10000, OMAP44XX_CONTROL_FUSE_MPU_OPP50, 0, 0, 0xf4, 0x0c, OMAP_ABB_NOMINAL_OPP),
 	VOLT_DATA_DEFINE(OMAP4460_VDD_MPU_OPP25_UV, 10000, OMAP44XX_CONTROL_FUSE_MPU_OPP50, 0, 0, 0xf4, 0x0c, OMAP_ABB_NOMINAL_OPP),
 #endif
 	VOLT_DATA_DEFINE(OMAP4460_VDD_MPU_OPP50_UV, 10000, OMAP44XX_CONTROL_FUSE_MPU_OPP50, 0, 0, 0xf4, 0x0c, OMAP_ABB_NOMINAL_OPP),
@@ -295,7 +293,6 @@ struct omap_volt_data omap446x_vdd_core_volt_data[] = {
 /* OMAP 4460 MPU Core VDD dependency table */
 static struct omap_vdd_dep_volt omap446x_vdd_mpu_core_dep_data[] = {
 #ifdef CONFIG_OMAP_UCFREQS
-	{.main_vdd_volt = OMAP4460_VDD_MPU_OPP15_UV, .dep_vdd_volt = OMAP4460_VDD_CORE_OPP50_UV},
 	{.main_vdd_volt = OMAP4460_VDD_MPU_OPP25_UV, .dep_vdd_volt = OMAP4460_VDD_CORE_OPP50_UV},
 #endif
 	{.main_vdd_volt = OMAP4460_VDD_MPU_OPP50_UV, .dep_vdd_volt = OMAP4460_VDD_CORE_OPP50_UV},
