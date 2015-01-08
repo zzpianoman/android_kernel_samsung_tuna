@@ -46,7 +46,6 @@
 #include <linux/custom_voltage.h>
 #endif
 
-
 #ifdef CONFIG_SMP
 struct lpj_info {
 	unsigned long	ref;
@@ -65,22 +64,24 @@ static struct device *mpu_dev;
 static DEFINE_MUTEX(omap_cpufreq_lock);
 
 static unsigned int max_thermal;
-static unsigned int max_capped;
+unsigned int max_capped;
 static unsigned int min_capped;
 static unsigned int max_freq;
 static unsigned int current_target_freq;
-static unsigned int screen_off_max_freq=350000;
-static unsigned int screen_on_min_freq=350000;
+#define DEFAULT_SCREEN_OFF_MAX_FREQ 525000
+unsigned int screen_off_max_freq=DEFAULT_SCREEN_OFF_MAX_FREQ;
+#define DEFAULT_SCREEN_ON_MIN_FREQ 350000
+unsigned int screen_on_min_freq=DEFAULT_SCREEN_ON_MIN_FREQ;
 static bool omap_cpufreq_ready;
 static bool omap_cpufreq_suspended;
 static unsigned int stock_freq_max;
+
+static int oc_val;
 
 #ifdef CONFIG_IVA_OVERCLOCK
 #define IVA_OC_FREQUENCY 430000000 // must match value in opp4xxx_data.c
 static int iva_freq_oc = 0; // boolean flag
 #endif
-
-
 
 static unsigned int omap_getspeed(unsigned int cpu)
 {
@@ -93,9 +94,40 @@ static unsigned int omap_getspeed(unsigned int cpu)
 	return rate;
 }
 
+static void omap_cpufreq_lpj_recalculate(unsigned int target_freq,
+					 unsigned int cur_freq)
+{
+ #ifdef CONFIG_SMP
+	unsigned int i;
+
+	/*
+	 * Note that loops_per_jiffy is not updated on SMP systems in
+	 * cpufreq driver. So, update the per-CPU loops_per_jiffy value
+	 * on frequency transition. We need to update all dependent CPUs.
+	 */
+	for_each_possible_cpu(i) {
+		struct lpj_info *lpj = &per_cpu(lpj_ref, i);
+		if (!lpj->freq) {
+			lpj->ref = per_cpu(cpu_data, i).loops_per_jiffy;
+			lpj->freq = cur_freq;
+		}
+
+		per_cpu(cpu_data, i).loops_per_jiffy =
+			cpufreq_scale(lpj->ref, lpj->freq, target_freq);
+	}
+
+	/* And don't forget to adjust the global one */
+	if (!global_lpj_ref.freq) {
+		global_lpj_ref.ref = loops_per_jiffy;
+		global_lpj_ref.freq = cur_freq;
+	}
+	loops_per_jiffy = cpufreq_scale(global_lpj_ref.ref, global_lpj_ref.freq,
+					target_freq);
+#endif
+}
+
 static int omap_cpufreq_scale(unsigned int target_freq, unsigned int cur_freq)
 {
-	unsigned int i;
 	int ret;
 	struct cpufreq_freqs freqs;
 
@@ -128,35 +160,15 @@ static int omap_cpufreq_scale(unsigned int target_freq, unsigned int cur_freq)
 	pr_info("cpufreq-omap: transition: %u --> %u\n", freqs.old, freqs.new);
 #endif
 
+	if (target_freq > cur_freq)
+		omap_cpufreq_lpj_recalculate(freqs.new, freqs.old);
+
 	ret = omap_device_scale(mpu_dev, mpu_dev, freqs.new * 1000);
 
 	freqs.new = omap_getspeed(0);
 
-#ifdef CONFIG_SMP
-	/*
-	 * Note that loops_per_jiffy is not updated on SMP systems in
-	 * cpufreq driver. So, update the per-CPU loops_per_jiffy value
-	 * on frequency transition. We need to update all dependent CPUs.
-	 */
-	for_each_possible_cpu(i) {
-		struct lpj_info *lpj = &per_cpu(lpj_ref, i);
-		if (!lpj->freq) {
-			lpj->ref = per_cpu(cpu_data, i).loops_per_jiffy;
-			lpj->freq = freqs.old;
-		}
-
-		per_cpu(cpu_data, i).loops_per_jiffy =
-			cpufreq_scale(lpj->ref, lpj->freq, freqs.new);
-	}
-
-	/* And don't forget to adjust the global one */
-	if (!global_lpj_ref.freq) {
-		global_lpj_ref.ref = loops_per_jiffy;
-		global_lpj_ref.freq = freqs.old;
-	}
-	loops_per_jiffy = cpufreq_scale(global_lpj_ref.ref, global_lpj_ref.freq,
-					freqs.new);
-#endif
+	if (target_freq < cur_freq)
+		omap_cpufreq_lpj_recalculate(freqs.new, freqs.old);
 
 	/* notifiers */
 	for_each_online_cpu(freqs.cpu)
@@ -173,7 +185,7 @@ static unsigned int omap_thermal_lower_speed(void)
 	unsigned int curr;
 	int i;
 
-	curr = max_thermal;
+	curr = omap_getspeed(0);
 
 	for (i = 0; freq_table[i].frequency != CPUFREQ_TABLE_END; i++)
 		if (freq_table[i].frequency > max &&
@@ -293,39 +305,25 @@ static void omap_cpu_early_suspend(struct early_suspend *h)
 
 	mutex_lock(&omap_cpufreq_lock);
 
-	if (screen_off_max_freq && min_capped) {
+	if (screen_off_max_freq) {
 		max_capped = screen_off_max_freq;
 
 		cur = omap_getspeed(0);
-
-		if (cur > max_capped) {
+		if (cur > max_capped)
 			omap_cpufreq_scale(max_capped, cur);
-		}
 
-		else if (current_target_freq < min_capped) {
-			omap_cpufreq_scale(current_target_freq, cur);
-		}
-
-		min_capped = 0;
+			if (min_capped)
+				min_capped = 0;
 	}
-
-	else if (screen_off_max_freq) {
-		max_capped = screen_off_max_freq;
-
-		cur = omap_getspeed(0);
-
-		if (cur > max_capped) {
-			omap_cpufreq_scale(max_capped, cur);
-		}
-	}
-
-	else if (min_capped) {
-		cur = omap_getspeed(0);
-
-		if (current_target_freq < min_capped) {
-			omap_cpufreq_scale(current_target_freq, cur);
-		}
+	
+	if (min_capped) {
 		min_capped = 0;
+		
+		if (!max_capped) {
+			cur = omap_getspeed(0);
+		}
+		if (cur > current_target_freq)
+			omap_cpufreq_scale(current_target_freq, cur);
 	}
 
 	mutex_unlock(&omap_cpufreq_lock);
@@ -336,42 +334,28 @@ static void omap_cpu_late_resume(struct early_suspend *h)
 	unsigned int cur;
 
 	mutex_lock(&omap_cpufreq_lock);
-		
-	if (max_capped && screen_on_min_freq) {
-		max_capped = 0;
+	
+	if (screen_on_min_freq) {
 		min_capped = screen_on_min_freq;
-
+	
 		cur = omap_getspeed(0);
-
-		if (cur < min_capped) {
+		if (cur < min_capped)
 			omap_cpufreq_scale(min_capped, cur);
-		}
-
-		else if (cur != current_target_freq) {
-			omap_cpufreq_scale(current_target_freq, cur);
-		}
-	}
-
-	else if (max_capped) {
-		max_capped = 0;
-
-		cur = omap_getspeed(0);
-
-		if (cur != current_target_freq) {
-			omap_cpufreq_scale(current_target_freq, cur);
-		}
+			
+			if (max_capped)
+				max_capped = 0;
 	}
 		
-	else if (screen_on_min_freq) {
-		min_capped = screen_on_min_freq;
+	if (max_capped) {
+		max_capped = 0;
 
-		cur = omap_getspeed(0);
-
-		if (cur < min_capped) {
-			omap_cpufreq_scale(min_capped, cur);
+		if (!min_capped) {
+			cur = omap_getspeed(0);
 		}
-	}		
-				
+		if (cur != current_target_freq)
+			omap_cpufreq_scale(current_target_freq, cur);
+	}
+
 	mutex_unlock(&omap_cpufreq_lock);
 }
 
@@ -419,7 +403,7 @@ static int __cpuinit omap_cpu_init(struct cpufreq_policy *policy)
 	cpufreq_frequency_table_get_attr(freq_table, policy->cpu);
 
 #if defined(CONFIG_OMAP_UCFREQS)
-	policy->min = 250000;
+	policy->min = 350000;
 #else
     policy->min = policy->cpuinfo.min_freq;
 #endif
@@ -434,7 +418,6 @@ static int __cpuinit omap_cpu_init(struct cpufreq_policy *policy)
 
 	for (i = 0; freq_table[i].frequency != CPUFREQ_TABLE_END; i++)
 		max_freq = max(freq_table[i].frequency, max_freq);
-	max_thermal = max_freq;
 
 	/*
 	 * On OMAP SMP configuartion, both processors share the voltage
@@ -452,9 +435,8 @@ static int __cpuinit omap_cpu_init(struct cpufreq_policy *policy)
 	policy->cpuinfo.transition_latency = 30 * 1000;
 
 #ifdef CONFIG_CUSTOM_VOLTAGE
- 	customvoltage_register_freqmutex(&omap_cpufreq_lock);
+	customvoltage_register_freqmutex(&omap_cpufreq_lock);
 #endif
-
 
 	return 0;
 
@@ -515,61 +497,123 @@ struct freq_attr omap_cpufreq_attr_screen_off_freq = {
 	.store = store_screen_off_freq,
 };
 
+/*
+ * Variable GPU OC - sysfs interface for cycling through different GPU top speeds
+ * Author: imoseyon@gmail.com
+ *
+*/
+static ssize_t show_gpu_oc(struct cpufreq_policy *policy, char *buf)
+{
+	return sprintf(buf, "%d\n", oc_val);
+}
+static ssize_t store_gpu_oc(struct cpufreq_policy *policy, const char *buf, size_t size)
+{
+	int prev_oc, ret1, ret2; 
+        struct device *dev;
+	unsigned long gpu_freqs[3] = {307200000,384000000,512000000};
+
+	prev_oc = oc_val;
+	if (prev_oc < 0 || prev_oc > 2) {
+		// shouldn't be here
+		pr_info("[vanir_info] gpu_oc error - bailing\n");	
+		return size;
+	}
+	
+	sscanf(buf, "%d\n", &oc_val);
+	if (oc_val < 0 ) oc_val = 0;
+	if (oc_val > 2 ) oc_val = 2;
+	if (prev_oc == oc_val) return size;
+
+        dev = omap_hwmod_name_get_dev("gpu");
+        ret1 = opp_disable(dev, gpu_freqs[prev_oc]);
+        ret2 = opp_enable(dev, gpu_freqs[oc_val]);
+        pr_info("[vanir_info] gpu top speed changed from %lu to %lu (%d,%d)\n", 
+		gpu_freqs[prev_oc], gpu_freqs[oc_val], ret1, ret2);
+	
+	return size;
+}
+
+static struct freq_attr gpu_oc = {
+	.attr = {.name = "gpu_oc", .mode=0666,},
+	.show = show_gpu_oc,
+	.store = store_gpu_oc,
+};
+
+#ifdef CONFIG_CUSTOM_VOLTAGE
+static ssize_t show_UV_mV_table(struct cpufreq_policy * policy, char * buf)
+{
+    return customvoltage_mpuvolt_read(NULL, NULL, buf);
+}
+
+static ssize_t store_UV_mV_table(struct cpufreq_policy * policy, const char * buf, size_t count)
+{
+    return customvoltage_mpuvolt_write(NULL, NULL, buf, count);
+}
+
+static struct freq_attr omap_UV_mV_table = {
+    .attr = {.name = "UV_mV_table",
+	     .mode=0644,
+    },
+    .show = show_UV_mV_table,
+    .store = store_UV_mV_table,
+};
+#endif
+
 #ifdef CONFIG_IVA_OVERCLOCK
 static ssize_t show_iva_freq_oc(struct cpufreq_policy *policy, char *buf)
 {
- 	return sprintf(buf, "%d\n", iva_freq_oc );
+	return sprintf(buf, "%d\n", iva_freq_oc );
 }
 
 static ssize_t store_iva_freq_oc(struct cpufreq_policy *policy, const char *buf, size_t size)
 {
- 	int prev_oc, ret;
- 	struct device *dev;
- 	struct voltagedomain *mpu_voltdm;
+	int prev_oc, ret;
+	struct device *dev;
+	struct voltagedomain *mpu_voltdm;
 
- 	if (iva_freq_oc < 0 || iva_freq_oc > 1 ) {
- 		pr_info("iva_oc value error, bailing\n");
- 		return size;
- 	}
+	if (iva_freq_oc < 0 || iva_freq_oc > 1 ) {
+		pr_info("iva_oc value error, bailing\n");	
+		return size;
+	}
 
- 	mpu_voltdm = voltdm_lookup("iva");
- 	if ( mpu_voltdm == NULL ) {
- 		pr_info("iva_oc voltdomain error, bailing\n");
- 		return size;
- 	}
+	mpu_voltdm = voltdm_lookup("iva");
+	if ( mpu_voltdm == NULL ) {
+		pr_info("iva_oc voltdomain error, bailing\n");			
+		return size;
+	}
 
- 	prev_oc = iva_freq_oc;
+	prev_oc = iva_freq_oc;
 
- 	sscanf(buf, "%d\n", &iva_freq_oc);
+	sscanf(buf, "%d\n", &iva_freq_oc);
+	
+	if (prev_oc == iva_freq_oc) return size;
 
- 	if (prev_oc == iva_freq_oc) return size;
+	mutex_lock(&omap_cpufreq_lock);
 
- 	mutex_lock(&omap_cpufreq_lock);
+	dev = omap_hwmod_name_get_dev("iva");
+	if (IS_ERR(dev)) {
+		pr_err("iva_oc: no iva device, bailing\n" );
+		goto Exit;
+	}
 
- 	dev = omap_hwmod_name_get_dev("iva");
- 	if (IS_ERR(dev)) {
- 		pr_err("iva_oc: no iva device, bailing\n" );
- 		goto Exit;
- 	}
+        if ( iva_freq_oc )
+        	ret = opp_enable(dev, IVA_OC_FREQUENCY);
+	else
+		ret = opp_disable(dev, IVA_OC_FREQUENCY);
 
- 	if ( iva_freq_oc )
- 		ret = opp_enable(dev, IVA_OC_FREQUENCY);
- 	else
- 		ret = opp_disable(dev, IVA_OC_FREQUENCY);
-
- 	pr_info("iva speed %s: %d, ret: %d\n", iva_freq_oc ? "enabled" : "disabled", IVA_OC_FREQUENCY, ret);
+	pr_info("iva speed %s:  %d, ret: %d\n", iva_freq_oc ? "enabled" : "disabled", IVA_OC_FREQUENCY, ret);
 
 Exit:
 
- 	mutex_unlock(&omap_cpufreq_lock);
+	mutex_unlock(&omap_cpufreq_lock);
 
- 	return size;
+	return size;
 }
 
 static struct freq_attr omap_cpufreq_attr_iva_freq_oc = {
- 	.attr = { .name = "iva_freq_oc", .mode = 0644,},
- 	.show = show_iva_freq_oc,
- 	.store = store_iva_freq_oc,
+	.attr = { .name = "iva_freq_oc", .mode = 0644,},
+	.show = show_iva_freq_oc,
+	.store = store_iva_freq_oc,
 };
 
 #endif
@@ -643,33 +687,12 @@ struct freq_attr omap_cpufreq_attr_screen_on_freq = {
 	.store = store_screen_on_freq,
 };
 
-#ifdef CONFIG_CUSTOM_VOLTAGE
-static ssize_t show_UV_mV_table(struct cpufreq_policy * policy, char * buf)
-{
- 	return customvoltage_mpuvolt_read(NULL, NULL, buf);
-}
-
-static ssize_t store_UV_mV_table(struct cpufreq_policy * policy, const char * buf, size_t count)
-{
- 	return customvoltage_mpuvolt_write(NULL, NULL, buf, count);
-}
-
-static struct freq_attr omap_UV_mV_table = {
- 	.attr = {.name = "UV_mV_table",
- 		.mode=0644,
- 	},
- 	.show = show_UV_mV_table,
- 	.store = store_UV_mV_table,
-};
-#endif
-
-
 static struct freq_attr *omap_cpufreq_attr[] = {
 	&cpufreq_freq_attr_scaling_available_freqs,
 	&omap_cpufreq_attr_screen_off_freq,
-	&omap_cpufreq_attr_screen_on_freq,
+	&gpu_oc,
 #ifdef CONFIG_CUSTOM_VOLTAGE
- 	&omap_UV_mV_table,
+	&omap_UV_mV_table,
 #endif
 #ifdef CONFIG_IVA_OVERCLOCK
 	&omap_cpufreq_attr_iva_freq_oc,
@@ -730,10 +753,11 @@ static int __init omap_cpufreq_init(void)
 {
 	int ret;
 
+	oc_val = 0;
+
 #ifdef CONFIG_IVA_OVERCLOCK
 	iva_freq_oc = 0;
 #endif
-
 
 	if (cpu_is_omap24xx())
 		mpu_clk_name = "virt_prcm_set";
@@ -759,6 +783,8 @@ static int __init omap_cpufreq_init(void)
 
 	ret = cpufreq_register_driver(&omap_driver);
 	omap_cpufreq_ready = !ret;
+
+	max_thermal = max_freq;
 
 	if (!ret) {
 		int t;
