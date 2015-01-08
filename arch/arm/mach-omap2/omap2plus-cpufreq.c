@@ -70,7 +70,7 @@ static unsigned int min_capped;
 static unsigned int max_freq;
 static unsigned int current_target_freq;
 static unsigned int screen_off_max_freq=384000;
-static unsigned int screen_on_min_freq=224000;
+static unsigned int screen_on_min_freq=285000;
 static bool omap_cpufreq_ready;
 static bool omap_cpufreq_suspended;
 
@@ -410,7 +410,7 @@ static int __cpuinit omap_cpu_init(struct cpufreq_policy *policy)
 
 	cpufreq_frequency_table_get_attr(freq_table, policy->cpu);
 
-	policy->min = 224000;
+	policy->min = 285000;
 	policy->max = 1228800;
 	policy->cur = omap_getspeed(policy->cpu);
 
