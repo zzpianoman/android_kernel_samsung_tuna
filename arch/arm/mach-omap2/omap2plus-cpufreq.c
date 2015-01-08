@@ -68,7 +68,7 @@ unsigned int max_capped;
 static unsigned int min_capped;
 static unsigned int max_freq;
 static unsigned int current_target_freq;
-#define DEFAULT_SCREEN_OFF_MAX_FREQ 525000
+#define DEFAULT_SCREEN_OFF_MAX_FREQ 350000
 unsigned int screen_off_max_freq=DEFAULT_SCREEN_OFF_MAX_FREQ;
 #define DEFAULT_SCREEN_ON_MIN_FREQ 350000
 unsigned int screen_on_min_freq=DEFAULT_SCREEN_ON_MIN_FREQ;
@@ -402,13 +402,13 @@ static int __cpuinit omap_cpu_init(struct cpufreq_policy *policy)
 
 	cpufreq_frequency_table_get_attr(freq_table, policy->cpu);
 
-#if defined(CONFIG_OMAP_UCFREQS)
+#if defined CONFIG_OMAP_UCFREQS
 	policy->min = 250000;
 #else
     policy->min = policy->cpuinfo.min_freq;
 #endif
 
-#if defined(CONFIG_OMAP_OCFREQS)
+#if defined CONFIG_OMAP_OCFREQS
     policy->max = stock_freq_max = 1200000;
 #else
 	policy->max = stock_freq_max = policy->cpuinfo.max_freq;
