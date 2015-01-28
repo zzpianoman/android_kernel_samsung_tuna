@@ -541,7 +541,7 @@ int __init omap4_opp_init(void)
 	omap4_mpu_opp_enable(1350000000);
     omap4_mpu_opp_enable(1400000000);
     omap4_mpu_opp_enable(1500000000);
-    //omap4_mpu_opp_enable(1600000000);
+    omap4_mpu_opp_enable(1600000000);
     //omap4_mpu_opp_enable(1650000000);
     //omap4_mpu_opp_enable(1720000000);
     //omap4_mpu_opp_enable(1760000000);
