@@ -14,11 +14,11 @@
 #define TEMPCONTROL_VERSION 1
 
 #define MIN_TEMPLIMIT 50000
-#define MAX_TEMPLIMIT 90000
+#define MAX_TEMPLIMIT 80000
 
 static int temp_limit, original_templimit;
 
-static bool safety_enabled = true;
+static bool safety_enabled = false;
 
 extern void tempcontrol_update(int templimit);
 
