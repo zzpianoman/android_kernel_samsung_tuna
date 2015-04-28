@@ -753,7 +753,7 @@ static int __init omap_cpufreq_init(void)
 {
 	int ret;
 
-	oc_val = 0;
+	oc_val = 1;
 
 #ifdef CONFIG_IVA_OVERCLOCK
 	iva_freq_oc = 0;
