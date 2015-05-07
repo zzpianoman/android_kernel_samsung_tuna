@@ -406,11 +406,11 @@ config TUNA_1_5_GHZ_MPU_OPP
 	  overclock frequency.
 
 config TUNA_ASRAM
-	bool "Additional Safe RAM of ~50 MB"
+	bool "Additional Safe RAM of ~40 MB"
 	default n
 	help
-	  If enabled, reclaims 50 MB from the reserved RAM. Reclaming 
-	  max 50 MB is safe and makes 1080p camera
+	  If enabled, reclaims 40 MB from the reserved RAM. Reclaming 
+	  max 40 MB is safe and makes 1080p camera
 	  functionality working.
 
 config FORCE_FAST_CHARGE
