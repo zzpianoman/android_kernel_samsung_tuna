@@ -53,9 +53,6 @@
 #define STATUS_ABNORMAL_TEMP	0x2
 #define STATUS_CHARGE_TIMEOVER	0x3
 
-#define MAX17040_SOC_CHECK	5
-#define MAX17040_VCELL_CHECK	3600
-
 struct max17040_chip {
 	struct i2c_client		*client;
 	struct work_struct		work;
@@ -162,11 +159,6 @@ static void max17040_reset(struct i2c_client *client)
 
 	msleep(125);
 
-	max17040_write_reg(client, MAX17040_MODE_MSB, 0x4000);
-}
-
-static void max17040_quick_start(struct i2c_client *client)
-{
 	max17040_write_reg(client, MAX17040_MODE_MSB, 0x4000);
 }
 
@@ -568,19 +560,6 @@ static int __devinit max17040_probe(struct i2c_client *client,
 
 	if (!chip->pdata->skip_reset)
 		max17040_reset(client);
-
-	max17040_get_soc(client);
-	max17040_get_vcell(client);
-
-	/* verify intial soc */
-	if (chip->soc <= MAX17040_SOC_CHECK &&
-		chip->vcell > MAX17040_VCELL_CHECK) {
-		dev_info(&client->dev, "%s(): faulty soc reported, pulling a "
-				"quick_start to reset soc algorithm\n",
-				__func__);
-
-		max17040_quick_start(client);
-	}
 
 	max17040_get_version(client);
 	INIT_WORK(&chip->work, max17040_work);
