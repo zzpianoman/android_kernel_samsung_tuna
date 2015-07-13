@@ -420,20 +420,6 @@ config FORCE_FAST_CHARGE
 	  A simple sysfs interface to force adapters that
 	  are detected as USB to charge as AC.
 
-config OMAP_SMARTREFLEX_CUSTOM_SENSOR
-	bool "Enable support for custom NSensor and PSensor values"
-	depends on OMAP_SMARTREFLEX
-	default n
-	help
-	  Enable support for custom NSensor and PSensor values in the 
-	  voltage definitions used for Smartreflex calibration.
-
-config OMAP_OCFREQS
-	bool "Enable O/C frequency slots 1.35-1.8GHz"
-	depends on OMAP_OVERRIDE_MPUTRIM && OMAP_SMARTREFLEX_CUSTOM_SENSOR
-	help
-	  Enable O/C frequency slots 1.35-1.8GHz.
-
 config OMAP_UCFREQS
     bool "Enable 230 MPU frequency slot"
 	depends on OMAP_SMARTREFLEX_CUSTOM_SENSOR
