@@ -80,7 +80,6 @@ unsigned int screen_off_max_freq=DEFAULT_SCREEN_OFF_MAX_FREQ;
 unsigned int screen_on_min_freq=DEFAULT_SCREEN_ON_MIN_FREQ;
 static bool omap_cpufreq_ready;
 static bool omap_cpufreq_suspended;
-static unsigned int stock_freq_max;
 
 static int oc_val;
 
@@ -541,15 +540,9 @@ static int __cpuinit omap_cpu_init(struct cpufreq_policy *policy)
 
 	cpufreq_frequency_table_get_attr(freq_table, policy->cpu);
 
-#if defined CONFIG_OMAP_UCFREQS
-	policy->min = 350000;
-#else
-        policy->min = policy->cpuinfo.min_freq;
-#endif
-
-	policy->max = stock_freq_max = policy->cpuinfo.max_freq;
-
-	policy->cur = omap_getspeed(policy->cpu);
+        policy->min = 350000;
+        policy->max = 1200000;
+        policy->cur = omap_getspeed(policy->cpu);
 
 	for (i = 0; freq_table[i].frequency != CPUFREQ_TABLE_END; i++)
 		max_freq = max(freq_table[i].frequency, max_freq);
