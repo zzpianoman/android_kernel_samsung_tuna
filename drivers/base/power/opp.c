@@ -130,6 +130,9 @@ struct device_opp *find_device_opp(struct device *dev)
 
 	return dev_opp;
 }
+#ifdef CONFIG_CUSTOM_VOLTAGE
+EXPORT_SYMBOL(find_device_opp);
+#endif
 
 /**
  * opp_get_voltage() - Gets the voltage corresponding to an available opp
