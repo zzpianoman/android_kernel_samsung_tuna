@@ -81,7 +81,6 @@ unsigned int screen_on_min_freq=DEFAULT_SCREEN_ON_MIN_FREQ;
 static bool omap_cpufreq_ready;
 static bool omap_cpufreq_suspended;
 
-static int oc_val;
 
 #ifdef CONFIG_IVA_OVERCLOCK
 #define IVA_OC_FREQUENCY 430000000 // must match value in opp4xxx_data.c
@@ -625,48 +624,6 @@ struct freq_attr omap_cpufreq_attr_screen_off_freq = {
 	.store = store_screen_off_freq,
 };
 
-/*
- * Variable GPU OC - sysfs interface for cycling through different GPU top speeds
- * Author: imoseyon@gmail.com
- *
-*/
-static ssize_t show_gpu_oc(struct cpufreq_policy *policy, char *buf)
-{
-	return sprintf(buf, "%d\n", oc_val);
-}
-static ssize_t store_gpu_oc(struct cpufreq_policy *policy, const char *buf, size_t size)
-{
-	int prev_oc, ret1, ret2; 
-        struct device *dev;
-	unsigned long gpu_freqs[3] = {307200000,384000000,512000000};
-
-	prev_oc = oc_val;
-	if (prev_oc < 0 || prev_oc > 2) {
-		// shouldn't be here
-		pr_info("[vanir_info] gpu_oc error - bailing\n");	
-		return size;
-	}
-	
-	sscanf(buf, "%d\n", &oc_val);
-	if (oc_val < 0 ) oc_val = 0;
-	if (oc_val > 2 ) oc_val = 2;
-	if (prev_oc == oc_val) return size;
-
-        dev = omap_hwmod_name_get_dev("gpu");
-        ret1 = opp_disable(dev, gpu_freqs[prev_oc]);
-        ret2 = opp_enable(dev, gpu_freqs[oc_val]);
-        pr_info("[vanir_info] gpu top speed changed from %lu to %lu (%d,%d)\n", 
-		gpu_freqs[prev_oc], gpu_freqs[oc_val], ret1, ret2);
-	
-	return size;
-}
-
-static struct freq_attr gpu_oc = {
-	.attr = {.name = "gpu_oc", .mode=0666,},
-	.show = show_gpu_oc,
-	.store = store_gpu_oc,
-};
-
 #ifdef CONFIG_CUSTOM_VOLTAGE
 static ssize_t show_UV_mV_table(struct cpufreq_policy * policy, char * buf)
 {
@@ -746,18 +703,6 @@ static struct freq_attr omap_cpufreq_attr_iva_freq_oc = {
 
 #endif
 
-static ssize_t show_gpu_clock(struct cpufreq_policy *policy, char *buf) {
-	struct clk *clk = clk_get(NULL, "dpll_per_m7x2_ck");	
-	return sprintf(buf, "%lu\n", clk->rate/1000);
-}
-
-static struct freq_attr gpu_clock = {
-    .attr = {.name = "gpu_cur_freq",
-	     .mode=0644,
-    },
-    .show = show_gpu_clock,
-};
-
 static ssize_t show_iva_clock(struct cpufreq_policy *policy, char *buf) {
         struct clk *clk = clk_get(NULL, "dpll_iva_m5x2_ck");
         return sprintf(buf, "%lu\n", clk->rate/1000);
@@ -818,14 +763,12 @@ struct freq_attr omap_cpufreq_attr_screen_on_freq = {
 static struct freq_attr *omap_cpufreq_attr[] = {
 	&cpufreq_freq_attr_scaling_available_freqs,
 	&omap_cpufreq_attr_screen_off_freq,
-	&gpu_oc,
 #ifdef CONFIG_CUSTOM_VOLTAGE
 	&omap_UV_mV_table,
 #endif
 #ifdef CONFIG_IVA_OVERCLOCK
 	&omap_cpufreq_attr_iva_freq_oc,
 #endif
-	&gpu_clock,
 	&iva_clock,
 	&omap_cpufreq_attr_screen_on_freq,
 	NULL,
@@ -880,8 +823,6 @@ static struct platform_device omap_cpufreq_device = {
 static int __init omap_cpufreq_init(void)
 {
 	int ret;
-
-	oc_val = 0;
 
 #ifdef CONFIG_IVA_OVERCLOCK
 	iva_freq_oc = 0;
