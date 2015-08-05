@@ -81,14 +81,12 @@ static ssize_t store_down_threshold(struct device *dev,
 	if (ret != 1)
 		return -EINVAL;
 
+	if (thres > 100) thres = 100;
+
 	mutex_lock(&odd.mutex);
 
-	if (thres <= 100) {
-		odd.down_threshold = thres;
-		odd.low_load_cnt = 0;
-	} else {
-		return -EINVAL;
-	}
+	odd.down_threshold = thres;
+	odd.low_load_cnt = 0;
 
 	mutex_unlock(&odd.mutex);
 
@@ -111,14 +109,12 @@ static ssize_t store_up_threshold(struct device *dev,
 	if (ret != 1)
 		return -EINVAL;
 
+	if (thres > 100) thres = 100;
+
 	mutex_lock(&odd.mutex);
 
-	if (thres <= 100) {
-		odd.up_threshold = thres;
-		odd.low_load_cnt = 0;
-	} else {
-		return -EINVAL;
-	}
+	odd.up_threshold = thres;
+	odd.low_load_cnt = 0;
 
 	mutex_unlock(&odd.mutex);
 
@@ -141,14 +137,12 @@ static ssize_t store_history_size(struct device *dev,
 	if (ret != 1)
 		return -EINVAL;
 
+	if (size < 1) size = 1;
+
 	mutex_lock(&odd.mutex);
 
-	if (size >= 1) {
-		odd.history_size = size;
-		odd.low_load_cnt = 0;
-	} else {
-		return -EINVAL;
-	}
+	odd.history_size = size;
+	odd.low_load_cnt = 0;
 
 	mutex_unlock(&odd.mutex);
 
