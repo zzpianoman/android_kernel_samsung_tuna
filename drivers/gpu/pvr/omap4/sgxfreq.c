@@ -65,6 +65,7 @@ sgxfreq_gov_deinit_t *sgxfreq_gov_deinit[] = {
 };
 
 #define SGXFREQ_DEFAULT_GOV_NAME "on3demand"
+#define SGXFREQ_DEFAULT_FREQ_LIMIT 307200000
 static unsigned long _idle_curr_time;
 static unsigned long _idle_prev_time;
 static unsigned long _active_curr_time;
@@ -334,7 +335,7 @@ int sgxfreq_init(struct device *dev)
 	rcu_read_unlock();
 
 	mutex_init(&sfd.freq_mutex);
-	sfd.freq_limit = sfd.freq_list[sfd.freq_cnt - 1];
+	sfd.freq_limit = SGXFREQ_DEFAULT_FREQ_LIMIT;
 	sgxfreq_set_freq_request(sfd.freq_list[sfd.freq_cnt - 1]);
 	sfd.sgx_data.clk_on = false;
 	sfd.sgx_data.active = false;
