@@ -1201,53 +1201,6 @@ void sgx_idle_work_func(struct work_struct *work)
 	RequestSGXFreq(gpsSysData, IMG_FALSE);
 }
 
-IMG_VOID SysSGXIdleTransition(IMG_BOOL bSGXIdle)
-{
-	int ret;
-
-	if (bSGXIdle) {
-		sgx_idle_log_event(SGX_IDLE);
-		if (sgx_idle_mode != 0) {
-			uint timeout = sgx_idle_timeout;
-
-			if (sgx_idle_mode == 2) {
-				ktime_t diff;
-
-				diff = ktime_sub(ktime_get(),
-						 sgx_idle_last_busy);
-
-				if (ktime_to_ns(diff) < 2 * NSEC_PER_MSEC)
-					timeout = 3 * NSEC_PER_MSEC -
-						ktime_to_ns(diff);
-			}
-
-			hrtimer_start(&sgx_idle_timer,
-				      ktime_set(0, timeout),
-				      HRTIMER_MODE_REL);
-		}
-	} else {
-		if (sgx_idle_mode != 0) {
-			bool fast = true;
-
-			ret = hrtimer_cancel(&sgx_idle_timer);
-			if (ret)
-				fast = false;
-
-			ret = cancel_work_sync(&sgx_idle_work);
-			if (ret)
-				fast = false;
-
-			if (fast)
-				sgx_idle_log_event(SGX_FAST);
-
-			RequestSGXFreq(gpsSysData, IMG_TRUE);
-		}
-		sgx_idle_log_event(SGX_BUSY);
-		sgx_idle_last_busy = ktime_get();
-	}
-	PVR_DPF((PVR_DBG_MESSAGE, "SysSGXIdleTransition switch to %u", bSGXIdle));
-}
-
 static void sgx_idle_init(void)
 {
 	sgx_idle_log_init();

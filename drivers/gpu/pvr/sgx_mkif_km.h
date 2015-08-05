@@ -108,7 +108,8 @@ typedef struct _SGXMKIF_HOST_CTL_
 	IMG_UINT32				ui32BRN31939Mem;
 #endif
 
-	IMG_UINT32				ui32OpenCLDelayCount;			
+	IMG_UINT32				ui32OpenCLDelayCount;	
+	IMG_UINT32				ui32InterruptCount;		
 } SGXMKIF_HOST_CTL;
 
 #define	SGXMKIF_CMDTA_CTRLFLAGS_READY			0x00000001

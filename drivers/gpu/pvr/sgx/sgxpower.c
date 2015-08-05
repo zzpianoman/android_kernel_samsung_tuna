@@ -33,6 +33,8 @@
 #include "sgxutils.h"
 #include "pdump_km.h"
 
+extern IMG_UINT32 g_ui32HostIRQCountSample;
+int powering_down = 0;
 
 #if defined(SUPPORT_HW_RECOVERY)
 static PVRSRV_ERROR SGXAddTimer(PVRSRV_DEVICE_NODE		*psDeviceNode,
@@ -276,6 +278,7 @@ PVRSRV_ERROR SGXPrePowerState (IMG_HANDLE				hDevHandle,
 		}
 		#endif 
 
+
 		#if defined(PDUMP)
 		PDUMPCOMMENT("TA/3D CCB Control - Wait for power event on uKernel.");
 		PDUMPMEMPOL(psDevInfo->psKernelSGXHostCtlMemInfo,
@@ -287,6 +290,20 @@ PVRSRV_ERROR SGXPrePowerState (IMG_HANDLE				hDevHandle,
 					MAKEUNIQUETAG(psDevInfo->psKernelSGXHostCtlMemInfo));
 		#endif 
 
+		/* Wait for the pending ukernel to host interrupts to come back. */
+		#if !defined(NO_HARDWARE)
+		if (PollForValueKM(&g_ui32HostIRQCountSample,
+							psDevInfo->psSGXHostCtl->ui32InterruptCount,
+							0xffffffff,
+							MAX_HW_TIME_US,
+							MAX_HW_TIME_US/WAIT_TRY_COUNT,
+							IMG_FALSE) != PVRSRV_OK)
+		{
+			PVR_DPF((PVR_DBG_ERROR,"SGXPrePowerState: Wait for pending interrupts failed."));
+			SGXDumpDebugInfo(psDevInfo, IMG_FALSE);
+			PVR_DBG_BREAK;
+		}
+		#endif /* NO_HARDWARE */
 #if defined(SGX_FEATURE_MP)
 		ui32CoresEnabled = ((OSReadHWReg(psDevInfo->pvRegsBaseKM, EUR_CR_MASTER_CORE) & EUR_CR_MASTER_CORE_ENABLE_MASK) >> EUR_CR_MASTER_CORE_ENABLE_SHIFT) + 1;
 #else
@@ -313,7 +330,9 @@ PVRSRV_ERROR SGXPrePowerState (IMG_HANDLE				hDevHandle,
 							  psDevInfo->ui32MasterClkGateStatus2Reg,
 							  psDevInfo->ui32MasterClkGateStatus2Mask,
 							  "Wait for SGX master clock gating (2)");
-		#endif 
+		#endif
+
+		powering_down = 1; 
 
 		if (eNewPowerState == PVRSRV_DEV_POWER_STATE_OFF)
 		{
@@ -374,6 +393,7 @@ PVRSRV_ERROR SGXPostPowerState (IMG_HANDLE				hDevHandle,
 				PVR_DPF((PVR_DBG_ERROR,"SGXPostPowerState: SGXInitialise failed"));
 				return eError;
 			}
+			powering_down = 0;
 		}
 		else
 		{
