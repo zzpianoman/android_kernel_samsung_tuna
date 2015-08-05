@@ -127,7 +127,7 @@ int activeidle_init(void)
 		return ret;
 
 	aid.freq_idle = sgxfreq_get_freq_min();
-	aid.freq_active = sgxfreq_get_freq_max();
+	aid.freq_active = sgxfreq_get_freq_limit();
 
 	return 0;
 }

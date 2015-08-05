@@ -258,7 +258,7 @@ static void on3demand_predict(void)
 	 */
 	if (odd.delta_active > ON3DEMAND_FRAME_DONE_DEADLINE_MS) {
 		odd.low_load_cnt = 0;
-		sgxfreq_set_freq_request(sgxfreq_get_freq_max());
+		sgxfreq_set_freq_request(sgxfreq_get_freq_limit());
 	}
 
 	if ((odd.delta_active + odd.delta_idle))
@@ -270,7 +270,7 @@ static void on3demand_predict(void)
 	/* Scale GPU frequency on purpose */
 	if (odd.load >= odd.up_threshold) {
 		odd.low_load_cnt = 0;
-		sgxfreq_set_freq_request(sgxfreq_get_freq_max());
+		sgxfreq_set_freq_request(sgxfreq_get_freq_limit());
 	} else if (odd.load <= odd.down_threshold) {
 		if (odd.low_load_cnt == odd.history_size) {
 			/* Convert load to frequency */
@@ -289,7 +289,7 @@ static void on3demand_predict(void)
 static void on3demand_active(void)
 {
 	if (!odd.polling_enabled) {
-		sgxfreq_set_freq_request(sgxfreq_get_freq_max());
+		sgxfreq_set_freq_request(sgxfreq_get_freq_limit());
 		odd.low_load_cnt = 0;
 		odd.polling_enabled = true;
 		schedule_delayed_work(&odd.work, odd.poll_interval * HZ/1000);

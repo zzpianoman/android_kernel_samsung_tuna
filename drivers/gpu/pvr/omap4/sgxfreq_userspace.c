@@ -56,8 +56,8 @@ static ssize_t store_frequency_set(struct device *dev,
 	if (ret != 1)
 		return -EINVAL;
 
-	if (freq > sgxfreq_get_freq_max())
-		freq = sgxfreq_get_freq_max();
+	if (freq > sgxfreq_get_freq_limit())
+		freq = sgxfreq_get_freq_limit();
 	usd.freq_user = sgxfreq_set_freq_request(freq);
 	trace_printk("USERSPACE: new freq=%luHz.\n", usd.freq_user);
 
