@@ -65,7 +65,7 @@ sgxfreq_gov_deinit_t *sgxfreq_gov_deinit[] = {
 };
 
 #define SGXFREQ_DEFAULT_GOV_NAME "on3demand"
-#define SGXFREQ_DEFAULT_FREQ_LIMIT 307200000
+#define SGXFREQ_DEFAULT_FREQ_LIMIT 384000000
 static unsigned long _idle_curr_time;
 static unsigned long _idle_prev_time;
 static unsigned long _active_curr_time;
