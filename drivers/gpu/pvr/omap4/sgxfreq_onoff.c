@@ -125,7 +125,7 @@ int onoff_init(void)
 		return ret;
 
 	ood.freq_off = sgxfreq_get_freq_min();
-	ood.freq_on = sgxfreq_get_freq_limit();
+	ood.freq_on = sgxfreq_get_freq_max();
 
 	return 0;
 }
