@@ -644,6 +644,8 @@ static PVRSRV_ERROR DevInitSGXPart1 (IMG_VOID *pvDeviceNode)
 	psDevInfo->eDeviceType 		= DEV_DEVICE_TYPE;
 	psDevInfo->eDeviceClass 	= DEV_DEVICE_CLASS;
 
+	/* Initialize SGX idle status */
+	psDevInfo->bSGXIdle = IMG_TRUE;
 	
 	psDeviceNode->pvDevice = (IMG_PVOID)psDevInfo;
 
