@@ -52,9 +52,9 @@ static struct on3demand_data {
 	struct mutex mutex;
 } odd;
 
-#define ON3DEMAND_DEFAULT_UP_THRESHOLD			80
-#define ON3DEMAND_DEFAULT_DOWN_THRESHOLD		30
-#define ON3DEMAND_DEFAULT_HISTORY_SIZE_THRESHOLD	5
+#define ON3DEMAND_DEFAULT_UP_THRESHOLD			95
+#define ON3DEMAND_DEFAULT_DOWN_THRESHOLD		75
+#define ON3DEMAND_DEFAULT_HISTORY_SIZE_THRESHOLD	10
 /* For Live wallpaper frame done at interval of ~64ms */
 #define ON3DEMAND_DEFAULT_POLL_INTERVAL			75
 
