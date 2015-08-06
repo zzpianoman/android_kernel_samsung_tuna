@@ -44,6 +44,7 @@ static struct on3demand_data {
 	unsigned long prev_total_active;
 	unsigned int low_load_cnt;
 	unsigned int poll_interval;
+	unsigned int frame_done_deadline;
 	unsigned long delta_active;
 	unsigned long delta_idle;
 	bool polling_enabled;
@@ -58,7 +59,7 @@ static struct on3demand_data {
 #define ON3DEMAND_DEFAULT_POLL_INTERVAL			75
 
 /*FIXME: This should be dynamic and queried from platform */
-#define ON3DEMAND_FRAME_DONE_DEADLINE_MS 16
+#define ON3DEMAND_DEFAULT_FRAME_DONE_DEADLINE_MS 16
 
 
 /*********************** begin sysfs interface ***********************/
@@ -155,6 +156,62 @@ static ssize_t show_load(struct device *dev,
 	return sprintf(buf, "%u\n", odd.load);
 }
 
+static ssize_t show_poll_interval(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%u\n", odd.poll_interval);
+}
+
+static ssize_t store_poll_interval(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	int ret;
+	unsigned int interval;
+
+	ret = sscanf(buf, "%u", &interval);
+	if (ret != 1)
+		return -EINVAL;
+
+	if (interval < 1) interval = 1;
+
+	mutex_lock(&odd.mutex);
+
+	odd.poll_interval = interval;
+	odd.low_load_cnt = 0;
+
+	mutex_unlock(&odd.mutex);
+
+	return count;
+}
+
+static ssize_t show_frame_done_deadline(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%u\n", odd.frame_done_deadline);
+}
+
+static ssize_t store_frame_done_deadline(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	int ret;
+	unsigned int deadline;
+
+	ret = sscanf(buf, "%u", &deadline);
+	if (ret != 1)
+		return -EINVAL;
+
+	if (deadline < 1) deadline = 1;
+
+	mutex_lock(&odd.mutex);
+
+	odd.frame_done_deadline = deadline;
+	odd.low_load_cnt = 0;
+
+	mutex_unlock(&odd.mutex);
+
+	return count;
+}
+
 static DEVICE_ATTR(down_threshold, 0644,
 	show_down_threshold, store_down_threshold);
 static DEVICE_ATTR(up_threshold, 0644,
@@ -163,12 +220,18 @@ static DEVICE_ATTR(history_size, 0644,
 	show_history_size, store_history_size);
 static DEVICE_ATTR(load, 0444,
 	show_load, NULL);
+static DEVICE_ATTR(poll_interval, 0644,
+	show_poll_interval, store_poll_interval);
+static DEVICE_ATTR(frame_done_deadline, 0644,
+	show_frame_done_deadline, store_frame_done_deadline);
 
 static struct attribute *on3demand_attributes[] = {
 	&dev_attr_down_threshold.attr,
 	&dev_attr_up_threshold.attr,
 	&dev_attr_history_size.attr,
 	&dev_attr_load.attr,
+	&dev_attr_poll_interval.attr,
+	&dev_attr_frame_done_deadline.attr,
 	NULL
 };
 
@@ -209,6 +272,7 @@ static int on3demand_start(struct sgxfreq_sgx_data *data)
 	odd.low_load_cnt = 0;
 	odd.poll_interval = ON3DEMAND_DEFAULT_POLL_INTERVAL;
 	odd.polling_enabled = false;
+	odd.frame_done_deadline = ON3DEMAND_DEFAULT_FRAME_DONE_DEADLINE_MS;
 
 	INIT_DELAYED_WORK(&odd.work, on3demand_timeout);
 
@@ -250,7 +314,7 @@ static void on3demand_predict(void)
 	 * If SGX was active for longer than frame display time (1/fps),
 	 * scale to highest possible frequency.
 	 */
-	if (odd.delta_active > ON3DEMAND_FRAME_DONE_DEADLINE_MS) {
+	if (odd.delta_active > odd.frame_done_deadline) {
 		odd.low_load_cnt = 0;
 		sgxfreq_set_freq_request(sgxfreq_get_freq_limit());
 	}
