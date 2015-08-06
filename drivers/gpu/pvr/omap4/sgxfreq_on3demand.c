@@ -332,7 +332,7 @@ static void on3demand_predict(void)
 	} else if (odd.load <= odd.down_threshold) {
 		if (odd.low_load_cnt == odd.history_size) {
 			/* Convert load to frequency */
-			freq = (sgxfreq_get_freq() * odd.load) / 100;
+			freq = (sgxfreq_get_freq() * odd.load) / 10;
 			sgxfreq_set_freq_request(freq);
 			odd.low_load_cnt = 0;
 		} else {
