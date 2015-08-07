@@ -165,6 +165,8 @@ static void onoff_sgx_clk_on(void)
 	ood.sgx_clk_on = true;
 	sgxfreq_set_freq_request(ood.freq_on);
 
+	sgxfreq_get_load();
+
 	mutex_unlock(&ood.mutex);
 }
 
@@ -174,6 +176,8 @@ static void onoff_sgx_clk_off(void)
 
 	ood.sgx_clk_on = false;
 	sgxfreq_set_freq_request(ood.freq_off);
+
+	sgxfreq_get_load();
 
 	mutex_unlock(&ood.mutex);
 }

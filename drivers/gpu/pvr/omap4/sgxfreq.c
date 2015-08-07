@@ -20,12 +20,15 @@
 
 static struct sgxfreq_data {
 	int freq_cnt;
+	unsigned int load;
 	unsigned long *freq_list;
 	unsigned long freq;
 	unsigned long freq_request;
 	unsigned long freq_limit;
 	unsigned long total_idle_time;
 	unsigned long total_active_time;
+	unsigned long prev_total_idle;
+	unsigned long prev_total_active;
 	struct mutex freq_mutex;
 	struct list_head gov_list;
 	struct sgxfreq_governor *gov;
@@ -188,6 +191,13 @@ static ssize_t store_governor(struct device *dev,
 		return count;
 }
 
+static ssize_t show_load(struct device *dev,
+			      struct device_attribute *attr,
+			      char *buf)
+{
+	return sprintf(buf, "%u\n", sfd.load);
+}
+
 static DEVICE_ATTR(frequency_list, 0444, show_frequency_list, NULL);
 static DEVICE_ATTR(frequency_request, 0444, show_frequency_request, NULL);
 static DEVICE_ATTR(frequency_limit, 0644, show_frequency_limit, store_frequency_limit);
@@ -195,6 +205,7 @@ static DEVICE_ATTR(frequency, 0444, show_frequency, NULL);
 static DEVICE_ATTR(governor_list, 0444, show_governor_list, NULL);
 static DEVICE_ATTR(governor, 0644, show_governor, store_governor);
 static DEVICE_ATTR(stat, 0444, show_stat, NULL);
+static DEVICE_ATTR(load, 0444, show_load, NULL);
 
 static const struct attribute *sgxfreq_attributes[] = {
 	&dev_attr_frequency_list.attr,
@@ -204,6 +215,7 @@ static const struct attribute *sgxfreq_attributes[] = {
 	&dev_attr_governor_list.attr,
 	&dev_attr_governor.attr,
 	&dev_attr_stat.attr,
+	&dev_attr_load.attr,
 	NULL
 };
 
@@ -339,6 +351,9 @@ int sgxfreq_init(struct device *dev)
 	sgxfreq_set_freq_request(sfd.freq_list[sfd.freq_cnt - 1]);
 	sfd.sgx_data.clk_on = false;
 	sfd.sgx_data.active = false;
+	sfd.load = 0;
+	sfd.prev_total_active = 0;
+	sfd.prev_total_idle = 0;
 
 	mutex_init(&sfd.gov_mutex);
 	INIT_LIST_HEAD(&sfd.gov_list);
@@ -434,6 +449,8 @@ int sgxfreq_set_governor(const char *name)
 		return -ENODEV;
 	}
 	sfd.gov = new_gov;
+
+	sfd.load = 0;
 
 	mutex_unlock(&sfd.gov_mutex);
 
@@ -608,4 +625,59 @@ void sgxfreq_notif_sgx_frame_done(void)
 		sfd.gov->sgx_frame_done();
 
 	mutex_unlock(&sfd.gov_mutex);
+}
+
+unsigned long sgxfreq_get_delta_active(void)
+{
+	static unsigned short first_sample_active = 1;
+	unsigned long total_active;
+	unsigned long delta_active;
+
+	if (first_sample_active == 1) {
+		first_sample_active = 0;
+		sfd.prev_total_active = sgxfreq_get_total_active_time();
+		return 0;
+	}
+
+	/* Sample new active time */
+	total_active = sgxfreq_get_total_active_time();
+
+	delta_active = __delta32(total_active, sfd.prev_total_active);
+
+	sfd.prev_total_active = total_active;
+
+	return delta_active;
+}
+
+unsigned long sgxfreq_get_delta_idle(void)
+{
+	static unsigned short first_sample_idle = 1;
+	unsigned long total_idle;
+	unsigned long delta_idle;
+
+	if (first_sample_idle == 1) {
+		first_sample_idle = 0;
+		sfd.prev_total_idle = sgxfreq_get_total_idle_time();
+		return 0;
+	}
+
+	/* Sample new idle time */
+	total_idle = sgxfreq_get_total_idle_time();
+
+	delta_idle = __delta32(total_idle, sfd.prev_total_idle);
+
+	sfd.prev_total_idle = total_idle;
+
+	return delta_idle;
+}
+
+int sgxfreq_get_load(void)
+{
+	unsigned long delta_active = sgxfreq_get_delta_active();
+	unsigned long delta_idle = sgxfreq_get_delta_idle();
+
+	if ((delta_active + delta_idle))
+		sfd.load = (100 * delta_active / (delta_active + delta_idle));
+
+	return sfd.load;
 }

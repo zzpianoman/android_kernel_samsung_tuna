@@ -167,6 +167,8 @@ static void activeidle_sgx_active(void)
 	aid.sgx_active = true;
 	sgxfreq_set_freq_request(aid.freq_active);
 
+	sgxfreq_get_load();
+
 	mutex_unlock(&aid.mutex);
 }
 
@@ -176,6 +178,8 @@ static void activeidle_sgx_idle(void)
 
 	aid.sgx_active = false;
 	sgxfreq_set_freq_request(aid.freq_idle);
+
+	sgxfreq_get_load();
 
 	mutex_unlock(&aid.mutex);
 }

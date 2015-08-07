@@ -36,17 +36,12 @@ static struct sgxfreq_governor on3demand_gov = {
 };
 
 static struct on3demand_data {
-	unsigned int load;
 	unsigned int up_threshold;
 	unsigned int down_threshold;
 	unsigned int history_size;
-	unsigned long prev_total_idle;
-	unsigned long prev_total_active;
 	unsigned int low_load_cnt;
 	unsigned int poll_interval;
 	unsigned int frame_done_deadline;
-	unsigned long delta_active;
-	unsigned long delta_idle;
 	bool polling_enabled;
 	struct delayed_work work;
 	struct mutex mutex;
@@ -150,12 +145,6 @@ static ssize_t store_history_size(struct device *dev,
 	return count;
 }
 
-static ssize_t show_load(struct device *dev,
-	struct device_attribute *attr, char *buf)
-{
-	return sprintf(buf, "%u\n", odd.load);
-}
-
 static ssize_t show_poll_interval(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
@@ -218,8 +207,6 @@ static DEVICE_ATTR(up_threshold, 0644,
 	show_up_threshold, store_up_threshold);
 static DEVICE_ATTR(history_size, 0644,
 	show_history_size, store_history_size);
-static DEVICE_ATTR(load, 0444,
-	show_load, NULL);
 static DEVICE_ATTR(poll_interval, 0644,
 	show_poll_interval, store_poll_interval);
 static DEVICE_ATTR(frame_done_deadline, 0644,
@@ -229,7 +216,6 @@ static struct attribute *on3demand_attributes[] = {
 	&dev_attr_down_threshold.attr,
 	&dev_attr_up_threshold.attr,
 	&dev_attr_history_size.attr,
-	&dev_attr_load.attr,
 	&dev_attr_poll_interval.attr,
 	&dev_attr_frame_done_deadline.attr,
 	NULL
@@ -263,12 +249,9 @@ static int on3demand_start(struct sgxfreq_sgx_data *data)
 {
 	int ret;
 
-	odd.load = 0;
 	odd.up_threshold = ON3DEMAND_DEFAULT_UP_THRESHOLD;
 	odd.down_threshold = ON3DEMAND_DEFAULT_DOWN_THRESHOLD;
 	odd.history_size = ON3DEMAND_DEFAULT_HISTORY_SIZE_THRESHOLD;
-	odd.prev_total_active = 0;
-	odd.prev_total_idle = 0;
 	odd.low_load_cnt = 0;
 	odd.poll_interval = ON3DEMAND_DEFAULT_POLL_INTERVAL;
 	odd.polling_enabled = false;
@@ -291,48 +274,26 @@ static void on3demand_stop(void)
 
 static void on3demand_predict(void)
 {
-	static unsigned short first_sample = 1;
-	unsigned long total_active, total_idle;
 	unsigned long freq;
-
-	if (first_sample == 1) {
-		first_sample = 0;
-		odd.prev_total_active = sgxfreq_get_total_active_time();
-		odd.prev_total_idle = sgxfreq_get_total_idle_time();
-		return;
-	}
-
-	/* Sample new active and idle times */
-	total_active = sgxfreq_get_total_active_time();
-	total_idle = sgxfreq_get_total_idle_time();
-
-	/* Compute load */
-	odd.delta_active = __delta32(total_active, odd.prev_total_active);
-	odd.delta_idle = __delta32(total_idle, odd.prev_total_idle);
+	int load = sgxfreq_get_load();
 
 	/*
 	 * If SGX was active for longer than frame display time (1/fps),
 	 * scale to highest possible frequency.
 	 */
-	if (odd.delta_active > odd.frame_done_deadline) {
+	if (sgxfreq_get_delta_active() > odd.frame_done_deadline) {
 		odd.low_load_cnt = 0;
 		sgxfreq_set_freq_request(sgxfreq_get_freq_max());
 	}
 
-	if ((odd.delta_active + odd.delta_idle))
-		odd.load = (100 * odd.delta_active / (odd.delta_active + odd.delta_idle));
-
-	odd.prev_total_active = total_active;
-	odd.prev_total_idle = total_idle;
-
 	/* Scale GPU frequency on purpose */
-	if (odd.load >= odd.up_threshold) {
+	if (load >= odd.up_threshold) {
 		odd.low_load_cnt = 0;
 		sgxfreq_set_freq_request(sgxfreq_get_freq_max());
-	} else if (odd.load <= odd.down_threshold) {
+	} else if (load <= odd.down_threshold) {
 		if (odd.low_load_cnt == odd.history_size) {
 			/* Convert load to frequency */
-			freq = (sgxfreq_get_freq() * odd.load) / 10;
+			freq = (sgxfreq_get_freq() * load) / 10;
 			sgxfreq_set_freq_request(freq);
 			odd.low_load_cnt = 0;
 		} else {
@@ -370,7 +331,7 @@ static void on3demand_timeout(struct work_struct *work)
 	 * If sgx was idle all throughout timer disable polling and
 	 * enable it on next sgx active event
 	 */
-	if (!odd.delta_active) {
+	if (!sgxfreq_get_delta_active()) {
 		sgxfreq_set_freq_request(sgxfreq_get_freq_min());
 		odd.low_load_cnt = 0;
 		odd.polling_enabled = false;

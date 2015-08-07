@@ -57,6 +57,8 @@ int sgxfreq_set_governor(const char *name);
 
 int sgxfreq_get_freq_list(unsigned long **pfreq_list);
 
+int sgxfreq_get_load(void);
+
 unsigned long sgxfreq_get_freq_min(void);
 unsigned long sgxfreq_get_freq_max(void);
 
@@ -72,6 +74,8 @@ unsigned long sgxfreq_set_freq_limit(unsigned long freq_limit);
 
 unsigned long sgxfreq_get_total_active_time(void);
 unsigned long sgxfreq_get_total_idle_time(void);
+unsigned long sgxfreq_get_delta_active(void);
+unsigned long sgxfreq_get_delta_idle(void);
 
 /* Helper functions */
 static inline unsigned long __tv2msec(struct timeval tv)
