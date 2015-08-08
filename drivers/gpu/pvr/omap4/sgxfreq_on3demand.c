@@ -54,7 +54,7 @@ static struct on3demand_data {
 #define ON3DEMAND_DEFAULT_POLL_INTERVAL			75
 
 /*FIXME: This should be dynamic and queried from platform */
-#define ON3DEMAND_DEFAULT_FRAME_DONE_DEADLINE_MS 16
+#define ON3DEMAND_DEFAULT_FRAME_DONE_DEADLINE_MS 32
 
 
 /*********************** begin sysfs interface ***********************/
