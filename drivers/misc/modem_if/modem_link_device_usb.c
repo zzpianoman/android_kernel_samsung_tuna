@@ -21,12 +21,82 @@
 #include <linux/poll.h>
 #include <linux/gpio.h>
 #include <linux/if_arp.h>
+#include <linux/sysfs.h>
 
 #include <linux/platform_data/modem.h>
 #include "modem_prj.h"
 #include "modem_link_device_usb.h"
 
 #define URB_COUNT	4
+
+unsigned int gpio_timeout = 100;
+unsigned int suspend_timeout = 100;
+
+/*********************** begin sysfs interface ***********************/
+
+extern struct kobject *sgxfreq_kobj;
+
+static ssize_t show_gpio_timeout(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%u\n", gpio_timeout);
+}
+
+static ssize_t store_gpio_timeout(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	int ret;
+
+	ret = sscanf(buf, "%u", &gpio_timeout);
+	if (ret != 1)
+		return -EINVAL;
+
+	return count;
+}
+
+static ssize_t show_suspend_timeout(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%u\n", suspend_timeout);
+}
+
+static ssize_t store_suspend_timeout(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	int ret;
+
+	ret = sscanf(buf, "%u", &suspend_timeout);
+	if (ret != 1)
+		return -EINVAL;
+
+	return count;
+}
+
+static DEVICE_ATTR(gpio_timeout, 0644,
+	show_gpio_timeout, store_gpio_timeout);
+static DEVICE_ATTR(suspend_timeout, 0644,
+	show_suspend_timeout, store_suspend_timeout);
+
+static int tuna_create_override_sysfs(void)
+{
+	int ret;
+	struct kobject *musb_override_kobj;
+	musb_override_kobj = kobject_create_and_add("musb_wakelock", NULL);
+	if (unlikely(!musb_override_kobj))
+		return -ENOMEM;
+
+	ret = (sysfs_create_file(musb_override_kobj,
+			&dev_attr_gpio_timeout.attr) ||
+		sysfs_create_file(musb_override_kobj,
+			&dev_attr_suspend_timeout.attr));
+	if (unlikely(ret < 0)) {
+		pr_err("musb_wakelock: sysfs_create_file failed: %d\n", ret);
+		return ret;
+	}
+
+	return 0;
+}
+/************************ end sysfs interface ************************/
 
 static irqreturn_t usb_resume_irq(int irq, void *data);
 
@@ -470,7 +540,7 @@ static int if_usb_resume(struct usb_interface *intf)
 			}
 		}
 		SET_SLAVE_WAKEUP(usb_ld->pdata, 1);
-		udelay(100);
+		udelay(suspend_timeout);
 		SET_SLAVE_WAKEUP(usb_ld->pdata, 0);
 		return 0;
 	}
@@ -706,7 +776,7 @@ static irqreturn_t usb_resume_irq(int irq, void *data)
 	val = gpio_get_value(usb_ld->pdata->gpio_host_wakeup);
 	irq_set_irq_type(irq, val ? IRQF_TRIGGER_LOW : IRQF_TRIGGER_HIGH);
 	dev = &usb_ld->usbdev->dev;
-	wake_lock_timeout(&usb_ld->gpiolock, 100);
+	wake_lock_timeout(&usb_ld->gpiolock, gpio_timeout);
 
 	pr_debug("< H-WUP %d\n", val);
 
@@ -820,6 +890,8 @@ struct link_device *usb_create_link_device(void *data)
 	ret = if_usb_init(usb_ld);
 	if (ret)
 		return NULL;
+
+	tuna_create_override_sysfs();
 
 	return ld;
 }
