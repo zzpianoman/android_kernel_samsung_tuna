@@ -504,7 +504,6 @@ config OMAP_SMARTREFLEX_CUSTOM_SENSOR
 
 config OMAP4460_OVERCLOCKING
 	bool "Enable additional frequencies for overclocking etc support for OMAP4460."
-	depends on OMAP_SMARTREFLEX_CUSTOM_SENSOR
 	default n
 
 endmenu
