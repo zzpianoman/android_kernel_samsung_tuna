@@ -14,6 +14,7 @@
 #include <linux/memblock.h>
 #include <linux/omap_ion.h>
 #include <linux/platform_device.h>
+#include <linux/dma-contiguous.h>
 #include <plat/common.h>
 
 #include <mach/omap4_ion.h>
@@ -45,6 +46,9 @@ static size_t omap4_ion_heap_secure_output_wfdhdcp_size;
 static size_t omap4_ducati_heap_size;
 static size_t omap4_ion_heap_tiler_mem_size;
 static size_t omap4_ion_heap_nonsec_tiler_mem_size;
+
+static struct page* omap4_ion_ipu_cma_pages;
+static size_t omap4_ion_ipu_cma_pages_count;
 
 static struct ion_platform_data omap4_ion_data = {
 	.nr = 6,
@@ -128,6 +132,7 @@ void __init omap_ion_init(void)
 #else
 		omap4_ion_heap_secure_input_size = (SZ_1M * 90);
 #endif
+
 #ifdef CONFIG_MACH_TUNA
 		omap4_ion_heap_secure_output_wfdhdcp_size = 0;
 #else
@@ -192,6 +197,17 @@ void __init omap_ion_init(void)
 				omap4_ion_heap_tiler_mem_addr,
 				omap4_ion_heap_nonsec_tiler_mem_addr);
 
+	omap4_ion_ipu_cma_pages_count = (omap4_ion_heap_secure_input_size +
+					omap4_ion_heap_secure_output_wfdhdcp_size +
+					omap4_ducati_heap_size +
+					omap4_ion_heap_nonsec_tiler_mem_size +
+					omap4_ion_heap_tiler_mem_size) / PAGE_SIZE;
+
+	pr_info("Reserving CMA IPU region at address = 0x%x with size = 0x%lx\n",
+		omap4_ion_heap_nonsec_tiler_mem_addr, omap4_ion_ipu_cma_pages_count * PAGE_SIZE);
+	dma_declare_contiguous(&omap4_ion_device.dev, omap4_ion_ipu_cma_pages_count * PAGE_SIZE,
+				omap4_ion_heap_nonsec_tiler_mem_addr, 0);
+
 	for (i = 0; i < omap4_ion_data.nr; i++) {
 		struct ion_platform_heap *h = &omap4_ion_data.heaps[i];
 
@@ -223,8 +239,6 @@ void __init omap_ion_init(void)
 	for (i = 0; i < omap4_ion_data.nr; i++)
 		if (omap4_ion_data.heaps[i].type == ION_HEAP_TYPE_CARVEOUT ||
 		    omap4_ion_data.heaps[i].type == OMAP_ION_HEAP_TYPE_TILER) {
-			ret = memblock_remove(omap4_ion_data.heaps[i].base,
-					      omap4_ion_data.heaps[i].size);
 			if (!omap4_ion_data.heaps[i].size)
 				continue;
 			if (omap4_ion_data.heaps[i].id ==
@@ -300,3 +314,28 @@ size_t omap_ion_heap_nonsec_tiler_mem_size(void)
 {
 	return omap4_ion_heap_nonsec_tiler_mem_size;
 }
+
+bool omap_ion_ipu_allocate_memory(void)
+{
+        omap4_ion_ipu_cma_pages = dma_alloc_from_contiguous_fixed_addr(&omap4_ion_device.dev,
+			omap4_ion_heap_nonsec_tiler_mem_addr, omap4_ion_ipu_cma_pages_count);
+	if (!omap4_ion_ipu_cma_pages) {
+		pr_err("CMA IPU pages allocation failed\n");
+		return false;
+	}
+
+	return true;
+}
+EXPORT_SYMBOL(omap_ion_ipu_allocate_memory);
+
+bool omap_ion_ipu_free_memory(void)
+{
+	if (!dma_release_from_contiguous(&omap4_ion_device.dev, omap4_ion_ipu_cma_pages,
+					omap4_ion_ipu_cma_pages_count)) {
+		pr_err("CMA IPU pages release failed\n");
+		return false;
+	}
+
+	return true;
+}
+EXPORT_SYMBOL(omap_ion_ipu_free_memory);
