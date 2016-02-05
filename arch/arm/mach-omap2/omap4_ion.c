@@ -17,6 +17,10 @@
 
 #include <mach/omap4_ion.h>
 
+/* Hardcoded Ducati heap address. */
+#define TUNA_DUCATI_HEAP_ADDR 0xba300000
+
+
 static struct ion_platform_data omap4_ion_data = {
 	.nr = 5,
 	.heaps = {
@@ -24,8 +28,12 @@ static struct ion_platform_data omap4_ion_data = {
 			.type = ION_HEAP_TYPE_CARVEOUT,
 			.id = OMAP_ION_HEAP_SECURE_INPUT,
 			.name = "secure_input",
+#ifdef CONFIG_MACH_TUNA /* fixed start address of ducati heap */
+			.base = TUNA_DUCATI_HEAP_ADDR,
+#else
 			.base = PHYS_ADDR_SMC_MEM -
 					OMAP4_ION_HEAP_SECURE_INPUT_SIZE,
+#endif
 			.size = OMAP4_ION_HEAP_SECURE_INPUT_SIZE,
 		},
 		{	.type = OMAP_ION_HEAP_TYPE_TILER,
