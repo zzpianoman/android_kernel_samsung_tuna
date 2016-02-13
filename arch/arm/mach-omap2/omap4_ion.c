@@ -82,9 +82,7 @@ static struct ion_platform_data omap4_ion_data = {
 };
 
 static struct omap_ion_platform_data omap4_ion_pdata = {
-	.ion = &omap4_ion_data,
-	.tiler2d_size = OMAP4_ION_HEAP_TILER_SIZE,
-	.nonsecure_tiler2d_size = OMAP4_ION_HEAP_NONSECURE_TILER_SIZE,
+	.ion = &omap4_ion_data
 };
 
 static struct platform_device omap4_ion_device = {
@@ -110,7 +108,7 @@ void __init omap_ion_init(void)
 	int i;
 	int ret;
 #ifndef CONFIG_ION_OMAP_TILER_DYNAMIC_ALLOC
-	u32 nonsecure = omap4_ion_pdata.nonsecure_tiler2d_size;
+	u32 nonsecure = OMAP4_ION_HEAP_NONSECURE_TILER_SIZE;
 #endif
 
 	system_512m = (omap_total_ram_size() == SZ_512M);
@@ -142,7 +140,7 @@ void __init omap_ion_init(void)
 #else
  		omap4_ion_heap_nonsec_tiler_mem_size = nonsecure;
  		omap4_ion_heap_tiler_mem_size =
- 					 (ALIGN(omap4_ion_pdata.tiler2d_size +
+ 					 (ALIGN(OMAP4_ION_HEAP_TILER_SIZE +
  					 nonsecure, SZ_2M) - nonsecure);
 #endif
 	}
