@@ -300,8 +300,13 @@ static int migrate_page_move_mapping(struct address_space *mapping,
 
 	if (!mapping) {
 		/* Anonymous page without mapping */
-		if (page_count(page) != 1)
+		if (page_count(page) != 1) {
+#ifdef CONFIG_CMA_DEBUG_VERBOSE
+			pr_err("migrate_page_move_mapping: page_count != 1\n");
+			print_cma_page_stats(page);
+#endif
 			return -EAGAIN;
+		}
 		return 0;
 	}
 
@@ -313,11 +318,19 @@ static int migrate_page_move_mapping(struct address_space *mapping,
 	expected_count = 2 + page_has_private(page);
 	if (page_count(page) != expected_count ||
 		radix_tree_deref_slot_protected(pslot, &mapping->tree_lock) != page) {
+#ifdef CONFIG_CMA_DEBUG_VERBOSE
+		pr_err("migrate_page_move_mapping: page_count != expected (%d)\n", expected_count);
+		print_cma_page_stats(page);
+#endif
 		spin_unlock_irq(&mapping->tree_lock);
 		return -EAGAIN;
 	}
 
 	if (!page_freeze_refs(page, expected_count)) {
+#ifdef CONFIG_CMA_DEBUG_VERBOSE
+		pr_err("migrate_page_move_mapping: couldn't freeze refs, expected = %d\n", expected_count);
+		print_cma_page_stats(page);
+#endif
 		spin_unlock_irq(&mapping->tree_lock);
 		return -EAGAIN;
 	}
@@ -331,6 +344,10 @@ static int migrate_page_move_mapping(struct address_space *mapping,
 	 */
 	if (mode == MIGRATE_ASYNC && head &&
 			!buffer_migrate_lock_buffers(head, mode)) {
+#ifdef CONFIG_CMA_DEBUG_VERBOSE
+		pr_err("migrate_page_move_mapping: failed to lock buffers in async mode\n");
+		print_cma_page_stats(page);
+#endif
 		page_unfreeze_refs(page, expected_count);
 		spin_unlock_irq(&mapping->tree_lock);
 		return -EAGAIN;
@@ -522,12 +539,26 @@ int buffer_migrate_page(struct address_space *mapping,
 	struct buffer_head *bh, *head;
 	int rc;
 
-	if (!page_has_buffers(page))
-		return migrate_page(mapping, newpage, page, mode);
+	if (!page_has_buffers(page)) {
+		rc = migrate_page(mapping, newpage, page, mode);
+#ifdef CONFIG_CMA_DEBUG_VERBOSE
+		if (rc) {
+			pr_err("buffer_migrate_page: migrate_page failed, result = %d\n", rc);
+			print_cma_page_stats(page);
+		}
+#endif
+		return rc;
+	}
 
 	head = page_buffers(page);
 
 	rc = migrate_page_move_mapping(mapping, newpage, page, head, mode);
+#ifdef CONFIG_CMA_DEBUG_VERBOSE
+	if (rc) {
+		pr_err("buffer_migrate_page: migrate_page_move_mapping failed, result = %d\n", rc);
+		print_cma_page_stats(page);
+	}
+#endif
 
 	if (rc)
 		return rc;
@@ -614,14 +645,21 @@ static int writeout(struct address_space *mapping, struct page *page)
 /*
  * Default handling if a filesystem does not provide a migration function.
  */
-static int fallback_migrate_page(struct address_space *mapping,
+int fallback_migrate_page(struct address_space *mapping,
 	struct page *newpage, struct page *page, enum migrate_mode mode)
 {
+	int rc;
 	if (PageDirty(page)) {
-		/* Only writeback pages in full synchronous migration */
 		if (mode != MIGRATE_SYNC)
 			return -EBUSY;
-		return writeout(mapping, page);
+		rc = writeout(mapping, page);
+#ifdef CONFIG_CMA_DEBUG_VERBOSE
+		if (rc) {
+			pr_err("fallback_migrate_page: writeout failed with result %d\n", rc);
+			print_cma_page_stats(page);
+		}
+#endif
+		return rc;
 	}
 
 	/*
@@ -629,10 +667,16 @@ static int fallback_migrate_page(struct address_space *mapping,
 	 * We must have no buffers or drop them.
 	 */
 	if (page_has_private(page) &&
-	    !try_to_release_page(page, GFP_KERNEL))
+	    !try_to_release_page(page, GFP_KERNEL)) {
+#ifdef CONFIG_CMA_DEBUG_VERBOSE
+		pr_err("fallback_migrate_page: try_to_release_page failed\n");
+		print_cma_page_stats(page);
+#endif
 		return -EAGAIN;
+	}
 
-	return migrate_page(mapping, newpage, page, mode);
+	rc = migrate_page(mapping, newpage, page, mode);
+	return rc;
 }
 
 /*
@@ -667,9 +711,16 @@ static int move_to_new_page(struct page *newpage, struct page *page,
 		SetPageSwapBacked(newpage);
 
 	mapping = page_mapping(page);
-	if (!mapping)
+	if (!mapping) {
 		rc = migrate_page(mapping, newpage, page, mode);
-	else if (mapping->a_ops->migratepage)
+#ifdef CONFIG_CMA_DEBUG_VERBOSE
+		if (rc) {
+			pr_err("move_to_new_page failed in 'no mapping' case with error %d\n", rc);
+			print_cma_page_stats(page);
+		}
+#endif
+	}
+	else if (mapping->a_ops->migratepage) {
 		/*
 		 * Most pages have a mapping and most filesystems provide a
 		 * migratepage callback. Anonymous pages are part of swap
@@ -678,8 +729,22 @@ static int move_to_new_page(struct page *newpage, struct page *page,
 		 */
 		rc = mapping->a_ops->migratepage(mapping,
 						newpage, page, mode);
-	else
+#ifdef CONFIG_CMA_DEBUG_VERBOSE
+		if (rc) {
+			pr_err("move_to_new_page failed in 'ops->migratepage' case with error %d\n", rc);
+			print_cma_page_stats(page);
+		}
+#endif
+	}
+	else {
 		rc = fallback_migrate_page(mapping, newpage, page, mode);
+#ifdef CONFIG_CMA_DEBUG_VERBOSE
+		if (rc) {
+			pr_err("move_to_new_page failed in 'fallback_migrate_page' case with error %d\n", rc);
+			print_cma_page_stats(page);
+		}
+#endif
+	}
 
 	if (rc) {
 		newpage->mapping = NULL;
@@ -703,7 +768,10 @@ static int __unmap_and_move(struct page *page, struct page *newpage,
 	struct anon_vma *anon_vma = NULL;
 
 	if (!trylock_page(page)) {
-		pr_err("__unmap_and_move: failed to trylock_page for page 0x%x, mode = %d, force = %d\n", page_to_phys(page), mode, force);
+#ifdef CONFIG_CMA_DEBUG_VERBOSE
+		pr_err("__unmap_and_move: failed to trylock_page, mode = %d, force = %d\n", mode, force);
+		print_cma_page_stats(page);
+#endif
 		if (!force || mode == MIGRATE_ASYNC)
 			goto out;
 
@@ -720,8 +788,13 @@ static int __unmap_and_move(struct page *page, struct page *newpage,
 		 * avoid the use of lock_page for direct compaction
 		 * altogether.
 		 */
-		if (current->flags & PF_MEMALLOC)
+		if (current->flags & PF_MEMALLOC) {
+#ifdef CONFIG_CMA_DEBUG_VERBOSE
+			pr_err("__unmap_and_move: failed locking due to PF_MEMALLOC, flags = 0x%x\n", current->flags);
+			print_cma_page_stats(page);
+#endif
 			goto out;
+		}
 
 		lock_page(page);
 	}
@@ -736,7 +809,10 @@ static int __unmap_and_move(struct page *page, struct page *newpage,
 	 * serializes that).
 	 */
 	if (PageKsm(page) && !offlining) {
-		pr_err("__unmap_and_move: PageKsm for page 0x%x, mode = %d, force = %d\n", page_to_phys(page), mode, force);
+#ifdef CONFIG_CMA_DEBUG_VERBOSE
+		pr_err("__unmap_and_move: PageKsm in non-offlining mode, mode = %d, force = %d\n", mode, force);
+		print_cma_page_stats(page);
+#endif
 		rc = -EBUSY;
 		goto unlock;
 	}
@@ -744,14 +820,16 @@ static int __unmap_and_move(struct page *page, struct page *newpage,
 	/* charge against new page */
 	charge = mem_cgroup_prepare_migration(page, newpage, &mem, GFP_KERNEL);
 	if (charge == -ENOMEM) {
-		pr_err("__unmap_and_move: failed to charge for page 0x%x, mode = %d, force = %d\n", page_to_phys(page), mode, force);
+#ifdef CONFIG_CMA_DEBUG_VERBOSE
+		pr_err("__unmap_and_move: failed to charge, mode = %d, force = %d\n", mode, force);
+		print_cma_page_stats(page);
+#endif
 		rc = -ENOMEM;
 		goto unlock;
 	}
 	BUG_ON(charge);
 
 	if (PageWriteback(page)) {
-		pr_err("__unmap_and_move: in page_writeback for page 0x%x, mode = %d, force = %d\n", page_to_phys(page), mode, force);
 		/*
 		 * Only in the case of a full syncronous migration is it
 		 * necessary to wait for PageWriteback. In the async case,
@@ -759,6 +837,10 @@ static int __unmap_and_move(struct page *page, struct page *newpage,
 		 * the overhead of stalling is too much
 		 */
 		if (mode != MIGRATE_SYNC) {
+#ifdef CONFIG_CMA_DEBUG_VERBOSE
+			pr_err("__unmap_and_move: in PageWriteback with ASYNC migration\n");
+			print_cma_page_stats(page);
+#endif
 			rc = -EBUSY;
 			goto uncharge;
 		}
@@ -766,6 +848,7 @@ static int __unmap_and_move(struct page *page, struct page *newpage,
 			goto uncharge;
 		wait_on_page_writeback(page);
 	}
+
 	/*
 	 * By try_to_unmap(), page->mapcount goes down to 0 here. In this case,
 	 * we cannot notice that anon_vma is freed while we migrates a page.
@@ -799,7 +882,10 @@ static int __unmap_and_move(struct page *page, struct page *newpage,
 			 */
 			remap_swapcache = 0;
 		} else {
-			pr_err("__unmap_and_move: in page_anon case for page 0x%x, mode = %d, force = %d\n", page_to_phys(page), mode, force);
+#ifdef CONFIG_CMA_DEBUG_VERBOSE
+			pr_err("__unmap_and_move: in page_anon case, mode = %d, force = %d\n", mode, force);
+			print_cma_page_stats(page);
+#endif
 			goto uncharge;
 		}
 	}
@@ -819,8 +905,12 @@ static int __unmap_and_move(struct page *page, struct page *newpage,
 	if (!page->mapping) {
 		VM_BUG_ON(PageAnon(page));
 		if (page_has_private(page)) {
-			try_to_free_buffers(page);
-			pr_err("__unmap_and_move: in !page_mapping/page_has_private case for page 0x%x, mode = %d, force = %d\n", page_to_phys(page), mode, force);
+			if (!try_to_free_buffers(page)) {
+#ifdef CONFIG_CMA_DEBUG_VERBOSE
+				pr_err("__unmap_and_move: in !page_mapping/page_has_private case, mode = %d, force = %d\n", mode, force);
+				print_cma_page_stats(page);
+#endif
+			}
 			goto uncharge;
 		}
 		goto skip_unmap;
@@ -832,11 +922,17 @@ static int __unmap_and_move(struct page *page, struct page *newpage,
 skip_unmap:
 	if (!page_mapped(page)) {
 		rc = move_to_new_page(newpage, page, remap_swapcache, mode);
+#ifdef CONFIG_CMA_DEBUG_VERBOSE
 		if (rc) {
-			pr_err("__unmap_and_move: move_to_new_page failed for page 0x%x, mode = %d, force = %d, code = %d\n", page_to_phys(page), mode, force, rc);
+			pr_err("__unmap_and_move: move_to_new_page failed, mode = %d, force = %d, code = %d\n", mode, force, rc);
+			print_cma_page_stats(page);
 		}
+#endif
 	} else if (rc) {
-		pr_err("__unmap_and_move: skip_unmap/page_mapped case for page 0x%x, mode = %d, force = %d, code = %d\n", page_to_phys(page), mode, force, rc);
+#ifdef CONFIG_CMA_DEBUG_VERBOSE
+		pr_err("__unmap_and_move: skip_unmap/page_mapped case, mode = %d, force = %d, code = %d\n", mode, force, rc);
+		print_cma_page_stats(page);
+#endif
 	}
 
 	if (rc && remap_swapcache)
@@ -868,7 +964,10 @@ static int unmap_and_move(new_page_t get_new_page, unsigned long private,
 	struct page *newpage = get_new_page(page, private, &result);
 
 	if (!newpage) {
-		pr_err("unmap_and_move: get_new_page failed for page 0x%x, mode = %d, force = %d\n", page_to_phys(page), mode, force);
+#ifdef CONFIG_CMA_DEBUG_VERBOSE
+		pr_err("unmap_and_move: get_new_page failed, mode = %d, force = %d\n", mode, force);
+		print_cma_page_stats(page);
+#endif
 		return -ENOMEM;
 	}
 
@@ -877,9 +976,18 @@ static int unmap_and_move(new_page_t get_new_page, unsigned long private,
 		goto out;
 	}
 
-	if (unlikely(PageTransHuge(page)))
-		if (unlikely(split_huge_page(page)))
+	if (unlikely(PageTransHuge(page))) {
+#ifdef CONFIG_CMA_DEBUG_VERBOSE
+		pr_err("unmap_and_move: calling split_huge_page\n");
+		print_cma_page_stats(page);
+#endif
+		if (unlikely(split_huge_page(page))) {
+#ifdef CONFIG_CMA_DEBUG_VERBOSE
+			pr_err("unmap_and_move: split_huge_page failed\n");
+#endif
 			goto out;
+		}
+	}
 
 	rc = __unmap_and_move(page, newpage, force, offlining, mode);
 out:
@@ -937,15 +1045,12 @@ static int unmap_and_move_huge_page(new_page_t get_new_page,
 	struct page *new_hpage = get_new_page(hpage, private, &result);
 	struct anon_vma *anon_vma = NULL;
 
-	if (!new_hpage) {
-		pr_err("unmap_and_move_huge_page: get_new_page failed for page 0x%x, mode = %d, force = %d\n", page_to_phys(hpage), mode, force);
+	if (!new_hpage)
 		return -ENOMEM;
-	}
 
 	rc = -EAGAIN;
 
 	if (!trylock_page(hpage)) {
-		pr_err("unmap_and_move_huge_page: trylock_page failed for page 0x%x, mode = %d, force = %d\n", page_to_phys(hpage), mode, force);
 		if (!force || mode != MIGRATE_SYNC)
 			goto out;
 		lock_page(hpage);
@@ -960,7 +1065,6 @@ static int unmap_and_move_huge_page(new_page_t get_new_page,
 		rc = move_to_new_page(new_hpage, hpage, 1, mode);
 
 	if (rc) {
-		pr_err("unmap_and_move_huge_page: move_to_new_page failed for page 0x%x, mode = %d, force = %d, code = %d\n", page_to_phys(hpage), mode, force, rc);
 		remove_migration_ptes(hpage, hpage);
 	}
 
@@ -1010,7 +1114,7 @@ int migrate_pages(struct list_head *from,
 	struct page *page;
 	struct page *page2;
 	int swapwrite = current->flags & PF_SWAPWRITE;
-	int rc;
+	int rc = 0;
 
 	if (!swapwrite)
 		current->flags |= PF_SWAPWRITE;
@@ -1040,9 +1144,11 @@ int migrate_pages(struct list_head *from,
 			}
 		}
 	}
+#ifdef CONFIG_CMA_DEBUG_VERBOSE
 	if (rc != 0) {
 		pr_err("migrate_pages: iterations ended up at %d pass with return code %d\n", pass, rc);
 	}
+#endif
 	rc = 0;
 out:
 	if (!swapwrite)
@@ -1063,7 +1169,7 @@ int migrate_huge_pages(struct list_head *from,
 	int pass = 0;
 	struct page *page;
 	struct page *page2;
-	int rc;
+	int rc = 0;
 
 	for (pass = 0; pass < 10 && retry; pass++) {
 		retry = 0;

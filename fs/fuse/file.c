@@ -15,6 +15,9 @@
 #include <linux/module.h>
 #include <linux/compat.h>
 #include <linux/swap.h>
+#ifdef CONFIG_CMA_DEBUG_VERBOSE
+#include <linux/migrate.h>
+#endif
 
 static const struct file_operations fuse_direct_io_file_operations;
 
@@ -2172,6 +2175,18 @@ static const struct file_operations fuse_direct_io_file_operations = {
 	/* no splice_read */
 };
 
+#ifdef CONFIG_CMA_DEBUG_VERBOSE
+int fuse_migrate_page(struct address_space *mapping,
+			struct page *newpage, struct page *page, enum migrate_mode mode)
+{
+	int rc = fallback_migrate_page(mapping, newpage, page, mode);
+	if (rc) {
+		pr_err("fuse_migrate_page: fallback_migrate_page failed with error %d\n", rc);
+	}
+	return rc;
+}
+#endif
+
 static const struct address_space_operations fuse_file_aops  = {
 	.readpage	= fuse_readpage,
 	.writepage	= fuse_writepage,
@@ -2181,6 +2196,9 @@ static const struct address_space_operations fuse_file_aops  = {
 	.readpages	= fuse_readpages,
 	.set_page_dirty	= __set_page_dirty_nobuffers,
 	.bmap		= fuse_bmap,
+#ifdef CONFIG_CMA_DEBUG_VERBOSE
+	.migratepage	= fuse_migrate_page,
+#endif
 };
 
 void fuse_init_file_inode(struct inode *inode)
