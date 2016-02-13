@@ -830,13 +830,10 @@ static int __init init(void)
 {
 	int ret;
 
-	// Use fixed major number as the init script needs it to pre-create
-	// devices for auto-loading.
-	rpmsg_omx_dev = MKDEV(252, 0);
-	ret = register_chrdev_region(rpmsg_omx_dev, MAX_OMX_DEVICES,
+	ret = alloc_chrdev_region(&rpmsg_omx_dev, 0, MAX_OMX_DEVICES,
 							KBUILD_MODNAME);
 	if (ret) {
-		pr_err("register_chrdev_region failed: %d\n", ret);
+		pr_err("alloc_chrdev_region failed: %d\n", ret);
 		goto out;
 	}
 

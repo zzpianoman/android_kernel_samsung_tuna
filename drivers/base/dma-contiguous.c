@@ -143,9 +143,6 @@ static __init int cma_activate_area(unsigned long base_pfn, unsigned long count)
 	unsigned i = count >> pageblock_order;
 	struct zone *zone;
 
-	//SMC allocations seem to go over the boot LCD framebuffer memory,
-	//hence the warnings are triggered, but it doesn't seem to result
-	//in any problems.
 	WARN_ON_ONCE(!pfn_valid(pfn));
 	zone = page_zone(pfn_to_page(pfn));
 

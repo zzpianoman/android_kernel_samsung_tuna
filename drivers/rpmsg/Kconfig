@@ -3,7 +3,7 @@ config RPMSG
 	default y
 	select VIRTIO
 	select VIRTIO_RING
-	#select OMAP_RPMSG
+	depends on OMAP_RPMSG
 	---help---
 	  This virtio driver provides support for shared-memory-based
           remote processor messaging, by registering the RPMSG bus which

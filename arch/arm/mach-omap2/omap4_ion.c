@@ -47,8 +47,17 @@ static size_t omap4_ducati_heap_size;
 static size_t omap4_ion_heap_tiler_mem_size;
 static size_t omap4_ion_heap_nonsec_tiler_mem_size;
 
-static struct page* omap4_ion_ipu_cma_pages;
-static size_t omap4_ion_ipu_cma_pages_count;
+static phys_addr_t omap4_ion_ipu_cma_addr[2];
+static size_t omap4_ion_ipu_cma_pages_count[2];
+static struct page* omap4_ion_ipu_cma_pages[2];
+
+/* See RPMSG_IPC_MEM calculation in arch/arm/plat-omap/omap_rpmsg.c */
+#define CMA_RPMSG_ADDR ((phys_addr_t)0xb3a00000)
+#define CMA_RPMSG_SIZE ((size_t)0x8c000)
+
+static phys_addr_t omap4_ion_rpmsg_cma_addr;
+static size_t omap4_ion_rpmsg_cma_pages_count;
+static struct page* omap4_ion_rpmsg_cma_pages;
 
 static struct ion_platform_data omap4_ion_data = {
 	.nr = 6,
@@ -110,10 +119,10 @@ void __init omap4_register_ion(void)
 void __init omap_ion_init(void)
 {
 	int i;
-	int ret;
 #ifndef CONFIG_ION_OMAP_TILER_DYNAMIC_ALLOC
 	u32 nonsecure = OMAP4_ION_HEAP_NONSECURE_TILER_SIZE;
 #endif
+	size_t ipu_cma_pages_count;
 
 	system_512m = (omap_total_ram_size() == SZ_512M);
 
@@ -197,16 +206,32 @@ void __init omap_ion_init(void)
 				omap4_ion_heap_tiler_mem_addr,
 				omap4_ion_heap_nonsec_tiler_mem_addr);
 
-	omap4_ion_ipu_cma_pages_count = (omap4_ion_heap_secure_input_size +
-					omap4_ion_heap_secure_output_wfdhdcp_size +
-					omap4_ducati_heap_size +
-					omap4_ion_heap_nonsec_tiler_mem_size +
-					omap4_ion_heap_tiler_mem_size) / PAGE_SIZE;
+	ipu_cma_pages_count = (omap4_ion_heap_secure_input_size +
+				omap4_ion_heap_secure_output_wfdhdcp_size +
+				omap4_ducati_heap_size +
+				omap4_ion_heap_nonsec_tiler_mem_size +
+				omap4_ion_heap_tiler_mem_size) / PAGE_SIZE;
 
-	pr_info("Reserving CMA IPU region at address = 0x%x with size = 0x%lx\n",
-		omap4_ion_heap_nonsec_tiler_mem_addr, omap4_ion_ipu_cma_pages_count * PAGE_SIZE);
-	dma_declare_contiguous(&omap4_ion_device.dev, omap4_ion_ipu_cma_pages_count * PAGE_SIZE,
+	pr_info("Reserving CMA IPU + RPMSG region at address = 0x%x with size = 0x%lx\n",
+		omap4_ion_heap_nonsec_tiler_mem_addr, ipu_cma_pages_count * PAGE_SIZE);
+	dma_declare_contiguous(&omap4_ion_device.dev, ipu_cma_pages_count * PAGE_SIZE,
 				omap4_ion_heap_nonsec_tiler_mem_addr, 0);
+
+	/* We need to separate RPMSG memory region from the overall Ducati range
+	 * as it has to remain allocated even when the rest of Ducati is unloaded.
+	 * Therefore, IPU carveout area is split into two pieces - below and above
+	 * RPMSG region. */
+	omap4_ion_ipu_cma_addr[0] = omap4_ion_heap_nonsec_tiler_mem_addr;
+	omap4_ion_ipu_cma_addr[1] = CMA_RPMSG_ADDR + CMA_RPMSG_SIZE;
+	omap4_ion_ipu_cma_pages_count[0] = (CMA_RPMSG_ADDR - omap4_ion_ipu_cma_addr[0]) / PAGE_SIZE;
+	omap4_ion_ipu_cma_pages_count[1] = ipu_cma_pages_count - omap4_ion_ipu_cma_pages_count[0]  - CMA_RPMSG_SIZE / PAGE_SIZE;
+
+	omap4_ion_rpmsg_cma_addr = CMA_RPMSG_ADDR;
+	omap4_ion_rpmsg_cma_pages_count = CMA_RPMSG_SIZE / PAGE_SIZE;
+
+	pr_info("CMA IPU region 0: address = 0x%x, size = 0x%lx\n", omap4_ion_ipu_cma_addr[0], omap4_ion_ipu_cma_pages_count[0] * PAGE_SIZE);
+	pr_info("CMA RPMSG region: address = 0x%x, size = 0x%lx\n", omap4_ion_rpmsg_cma_addr, omap4_ion_rpmsg_cma_pages_count * PAGE_SIZE);
+	pr_info("CMA IPU region 1: address = 0x%x, size = 0x%lx\n", omap4_ion_ipu_cma_addr[1], omap4_ion_ipu_cma_pages_count[1] * PAGE_SIZE);
 
 	for (i = 0; i < omap4_ion_data.nr; i++) {
 		struct ion_platform_heap *h = &omap4_ion_data.heaps[i];
@@ -248,10 +273,6 @@ void __init omap_ion_init(void)
 				omap4_ion_data.heaps[i].size =
 					omap4_ion_heap_secure_output_wfdhdcp_size >> 1;
 			}
-			if (ret)
-				pr_err("memblock remove of %x@%lx failed\n",
-				       omap4_ion_data.heaps[i].size,
-				       omap4_ion_data.heaps[i].base);
 		}
 }
 
@@ -317,10 +338,19 @@ size_t omap_ion_heap_nonsec_tiler_mem_size(void)
 
 bool omap_ion_ipu_allocate_memory(void)
 {
-        omap4_ion_ipu_cma_pages = dma_alloc_from_contiguous_fixed_addr(&omap4_ion_device.dev,
-			omap4_ion_heap_nonsec_tiler_mem_addr, omap4_ion_ipu_cma_pages_count);
-	if (!omap4_ion_ipu_cma_pages) {
-		pr_err("CMA IPU pages allocation failed\n");
+	omap4_ion_ipu_cma_pages[0] = dma_alloc_from_contiguous_fixed_addr(&omap4_ion_device.dev,
+			omap4_ion_ipu_cma_addr[0], omap4_ion_ipu_cma_pages_count[0]);
+	if (!omap4_ion_ipu_cma_pages[0]) {
+		pr_err("CMA IPU region 0 pages allocation failed\n");
+		return false;
+	}
+
+	omap4_ion_ipu_cma_pages[1] = dma_alloc_from_contiguous_fixed_addr(&omap4_ion_device.dev,
+			omap4_ion_ipu_cma_addr[1], omap4_ion_ipu_cma_pages_count[1]);
+	if (!omap4_ion_ipu_cma_pages[1]) {
+		dma_release_from_contiguous(&omap4_ion_device.dev, omap4_ion_ipu_cma_pages[0],
+						omap4_ion_ipu_cma_pages_count[0]);
+		pr_err("CMA IPU region 1 pages allocation failed\n");
 		return false;
 	}
 
@@ -330,12 +360,45 @@ EXPORT_SYMBOL(omap_ion_ipu_allocate_memory);
 
 bool omap_ion_ipu_free_memory(void)
 {
-	if (!dma_release_from_contiguous(&omap4_ion_device.dev, omap4_ion_ipu_cma_pages,
-					omap4_ion_ipu_cma_pages_count)) {
-		pr_err("CMA IPU pages release failed\n");
+	bool ret = true;
+
+	if (!dma_release_from_contiguous(&omap4_ion_device.dev, omap4_ion_ipu_cma_pages[0],
+					omap4_ion_ipu_cma_pages_count[0])) {
+		pr_err("CMA IPU region 0 pages release failed\n");
+		ret = false;
+	}
+
+	if (!dma_release_from_contiguous(&omap4_ion_device.dev, omap4_ion_ipu_cma_pages[1],
+					omap4_ion_ipu_cma_pages_count[1])) {
+		pr_err("CMA IPU region 1 pages release failed\n");
+		ret = false;
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL(omap_ion_ipu_free_memory);
+
+bool omap_ion_rpmsg_allocate_memory(void)
+{
+	omap4_ion_rpmsg_cma_pages = dma_alloc_from_contiguous_fixed_addr(&omap4_ion_device.dev,
+			omap4_ion_rpmsg_cma_addr, omap4_ion_rpmsg_cma_pages_count);
+	if (!omap4_ion_rpmsg_cma_pages) {
+		pr_err("CMA RPMSG pages allocation failed\n");
 		return false;
 	}
 
 	return true;
 }
-EXPORT_SYMBOL(omap_ion_ipu_free_memory);
+EXPORT_SYMBOL(omap_ion_rpmsg_allocate_memory);
+
+bool omap_ion_rpmsg_free_memory(void)
+{
+	if (!dma_release_from_contiguous(&omap4_ion_device.dev, omap4_ion_rpmsg_cma_pages,
+					omap4_ion_rpmsg_cma_pages_count)) {
+		pr_err("CMA RPMSG pages release failed\n");
+		return false;
+	}
+
+	return true;
+}
+EXPORT_SYMBOL(omap_ion_rpmsg_free_memory);

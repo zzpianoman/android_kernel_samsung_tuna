@@ -58,6 +58,8 @@ int omap_tiler_vinfo(struct ion_client *client,
 			unsigned int *vsize);
 bool omap_ion_ipu_allocate_memory(void);
 bool omap_ion_ipu_free_memory(void);
+bool omap_ion_rpmsg_allocate_memory(void);
+bool omap_ion_rpmsg_free_memory(void);
 #endif /* __KERNEL__ */
 
 /* additional heaps used only on omap */
