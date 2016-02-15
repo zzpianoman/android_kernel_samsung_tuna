@@ -101,6 +101,31 @@ EXPORT_SYMBOL(sec_class);
 
 #define UART_NUM_FOR_GPS	0
 
+/* Default IOBUFS size guaranteed that the memory used for early boot
+ * framebuffer will be overlapped by IOBUFS allocation, therefore
+ * won't be written to and there will be no extra output until video
+ * driver is initialized properly.
+ *
+ * With smaller IOBUFS size that framebuffer area becomes exposed
+ * to the system, hence the phone displays all the random garbabe
+ * that's in that memory region until video driver is initialized.
+ *
+ * While harmless, it looks ugly, so we'd better correct it. The
+ * easiest way to do it is to force VRAM allocation during the boot
+ * that overlaps with earlier framebuffer address.
+ *
+ * Given that for tuna devices lcd_bootfb equals 0xbea70000 at
+ * the boot and VRAM size is 7.5MB, allocating VRAM at 0xbea00000
+ * ensures that LCD range is fully covered.
+ *
+ * Cleaner solution would be to parse that parameter and calculate
+ * the necessary address dynamically, but for now hard-coded value
+ * will do. */
+#define OMAP_VRAM_START 0xbea00000
+/* Make sure we override VRAM region only if IOBUFS is small enough
+ * so that we don't overlap with it. */
+#define OMAP_MAX_IOBUFS_SIZE ((OMAP_VRAM_START - 0xba300000) / 1024 / 1024)
+
 static int tuna_hw_rev;
 
 static struct gpio tuna_hw_rev_gpios[] = {
@@ -1366,7 +1391,13 @@ static void __init tuna_reserve(void)
 {
 	omap_init_ram_size();
 
+#if defined(CONFIG_ION_OMAP_IPU_MEM_IOBUFS_SIZE) && \
+	CONFIG_ION_OMAP_IPU_MEM_IOBUFS_SIZE <= OMAP_MAX_IOBUFS_SIZE
+	/* See comments above for OMAP_VRAM_START for justification. */
+	omap_vram_set_sdram_vram(TUNA_FB_RAM_SIZE, OMAP_VRAM_START);
+#else
 	omap_vram_set_sdram_vram(TUNA_FB_RAM_SIZE, 0);
+#endif
 
 #ifdef CONFIG_ION_OMAP
 	omap_ion_init();
