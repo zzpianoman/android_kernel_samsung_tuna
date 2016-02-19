@@ -1397,7 +1397,7 @@ static void _rproc_put(struct rproc *rproc, bool use_refcounting)
 	 * make sure rproc is really running before powering it off.
 	 * this is important, because the fw loading might have failed.
 	 */
-	if (rproc->state == RPROC_RUNNING || rproc->state == RPROC_CRASHED) {
+	if (rproc->state != RPROC_OFFLINE && rproc->state != RPROC_LOADING) {
 #ifdef CONFIG_REMOTE_PROC_AUTOSUSPEND
 		if (use_refcounting) {
 			/*
