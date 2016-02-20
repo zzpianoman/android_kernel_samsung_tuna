@@ -307,6 +307,11 @@ config ION_OMAP_IPU_MEM_IOBUFS_SIZE
 	depends on ION_OMAP
 	default 0
 
+config ION_OMAP_TILER_DYNAMIC_ALLOC
+	bool "Force dynamic allocation of tiler memory."
+	depends on ION_OMAP
+	default n
+
 endmenu
 
 endif
