@@ -57,6 +57,7 @@
 #include <plat/mmc.h>
 #include <plat/remoteproc.h>
 #include <plat/omap-serial.h>
+#include <plat/vram.h>
 
 #include <mach/omap_fiq_debugger.h>
 
@@ -69,6 +70,7 @@
 #include "control.h"
 #include "mux.h"
 #include "board-tuna.h"
+#include "board-tuna-display.h"
 #include "omap_ram_console.h"
 #include "resetreason.h"
 #include <mach/dmm.h>
@@ -1363,6 +1365,8 @@ static void __init tuna_map_io(void)
 static void __init tuna_reserve(void)
 {
 	omap_init_ram_size();
+
+	omap_vram_set_sdram_vram(TUNA_FB_RAM_SIZE, 0);
 
 #ifdef CONFIG_ION_OMAP
 	omap_ion_init();
